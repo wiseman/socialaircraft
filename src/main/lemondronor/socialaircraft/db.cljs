@@ -34,54 +34,48 @@
              (println "Database initialized.")
              (.close db-conn))))))
 
+(defn parse-record [rec]
+  (let [new-rec (reduce (fn [m k]
+                  (assoc m (-> k csk/->kebab-case keyword) (gobject/get rec k)))
+                {}
+                (js-keys rec))]
+    (if (:last-post-time new-rec)
+      (assoc new-rec :last-post-time (js/Date. (:last-post-time new-rec)))
+      new-rec)))
+
 (defn in-operator-helper [values]
   (str "(" (string/join ", " (repeat (count values) "?")) ")"))
 
-
-(defn parse-record [rec]
-  (reduce (fn [m k]
-            (assoc m (-> k csk/->kebab-case keyword) (gobject/get rec k)))
-          {}
-          (js-keys rec)))
-
-(def serialize-record [rec]
-
-
-(defn load-all-aircraft& []
-  (println "Loading aircraft from database...")
-  (let [chan (async/chan)
-        sql "select * from aircraft"
-        cb (fn [err rows]
-             (when err
-               (println "Error in get-all-aircraft:" err))
-             (println "Loaded" (count rows) "aircraft from database.")
-             (let [result (util/index-by :icao (map parse-record rows))]
-               (async/put! chan result)))]
-    (.all db-conn sql cb)
+(defn get-aircraft& [icaos]
+  (println "Looking for" (count icaos) "aircraft in database")
+  (let [sql (str "SELECT * from aircraft where icao in "
+                 (in-operator-helper icaos))
+        chan (async/chan)]
+    (apply (.bind (.-all db-conn) db-conn)
+           sql
+           (concat icaos
+                   (list
+                    (fn [err rows]
+                      (when err
+                        (println "Error in get-aircraft&:" err))
+                      (println "Loaded" (count rows) "aircraft from database")
+                      (async/put! chan (util/index-by :icao (map parse-record rows)))))))
     chan))
 
-(defn get-all-aircraft& []
-  (if-let [db @db_]
-    (let [chan (async/chan)]
-      (println "Using cache")
-      (async/put! chan db)
-      chan)
-    (load-all-aircraft&)))
 
-
+(defn record-post [icao]
   (.run
    db-conn
    (str "INSERT INTO aircraft (icao, last_post_time) "
         "VALUES (?, ?) "
         "ON CONFLICT (icao) "
         "DO UPDATE SET last_post_time = excluded.last_post_time")
-   (:icao post)
-   (.toISOString (js/Date.))))
-
-(defn record-post [post]
-  (let [icao (:icao post)
-        new-rec {:icao icao :last-post-time (js/Date.)}]
-    (if (@db_ icao)
-      (insert-record new-rec)
-      (update-record new-rec))
-    (swap! db_ assoc icao new-rec)))
+   icao
+   (.toISOString (js/Date.))
+   ;; (let [icao (:icao post)
+   ;;       new-rec {:icao icao :last-post-time (js/Date.)}]
+   ;;   (if (@db_ icao)
+   ;;     (insert-record new-rec)
+   ;;     (update-record new-rec))
+   ;;   (swap! db_ assoc icao new-rec))
+   ))

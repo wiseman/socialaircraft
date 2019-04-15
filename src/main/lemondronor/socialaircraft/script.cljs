@@ -93,32 +93,32 @@
 
 (defn make-post [post]
   (println (gstring/format "Posting about %s" (:icao post)))
-  (db/record-post post))>
+  (db/record-post (:icao post)))
 
 
 (def posting-interval-ms (* 10 1000))
 
 (defn process-current-aircraft [ac history]
-  ;;(println "Processing" (ac-short-desc ac))
+  ;;o(println "Processing" (ac-short-desc ac))
   (let [last-post-time (:last-post-time history)]
     (when (or (nil? last-post-time)
-            (> (- (js/Date.) last-post-time) posting-interval-ms))
-     (let [post (build-post ac history)]
-       (make-post post)))))
+              (> (- (js/Date.) last-post-time) posting-interval-ms))
+      (let [post (build-post ac history)]
+        (make-post post)))))
 
 (defn process-flying-aircraft [flying history]
   (doseq [[icao ac] flying]
     (process-current-aircraft ac (history icao))))
 
-(defn process-stale-aircraft [flying history])
+(defn process-stale-aircraft [flying])
 
 (defn run []
   (println "Processing aircraft")
   (go
-    (let [flying-aircraft (<! (get-flying-aircraft&))
-          aircraft-history (<! (db/get-all-aircraft&))]
-      (process-flying-aircraft flying-aircraft aircraft-history)
-      (process-stale-aircraft flying-aircraft aircraft-history)))
+    (let [flying-ac (<! (get-flying-aircraft&))
+          flying-ac-history (<! (db/get-aircraft& (keys flying-ac)))]
+      (process-flying-aircraft flying-ac flying-ac-history)
+      (process-stale-aircraft flying-ac)))
   (js/setTimeout run 5000))
 
 
