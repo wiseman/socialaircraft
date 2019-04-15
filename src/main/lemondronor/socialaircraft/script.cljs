@@ -130,12 +130,7 @@
 
 
 (defn main [& args]
-  (cond (and (= (count args) 1) (= (first args) "init-db"))
-        (db/init-db)
-        (and (= (count args) 1) (= (first args) "run"))
-        (run)
-        :else
-        (println "Available commands: init-db"))
+  (run)
   ;; Why isn't my node process exiting? (shadow-cljs dev mode starts a REPL,
   ;; that's why.
   ;;(println (._getActiveHandles js/process))

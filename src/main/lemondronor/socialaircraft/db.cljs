@@ -7,9 +7,6 @@
             ["fs" :as fs]
             ["sqlite3" :as sqlite3]))
 
-(def ^:private db-path "socialaircraft.db")
-(def ^:private db-conn (sqlite3/Database. db-path))
-
 (def ^:private setup-sql "
   CREATE TABLE aircraft (
     icao TEXT NOT NULL PRIMARY KEY,
@@ -18,7 +15,7 @@
   ")
 
 
-(defn init-db []
+(defn init-db [db-conn]
   (println "Initializing database...")
   (.serialize
    db-conn
@@ -31,13 +28,27 @@
              (.close db-conn))))))
 
 
+(def ^:private db-path "socialaircraft.db")
+
+;; Create and initialize database if it doesn't exist.
+(when (not (fs/existsSync db-path))
+  (let [db-conn (sqlite3/Database. db-path)]
+    (.serialize
+     db-conn
+     #(init-db db-conn)
+     #(.close db-conn))))
+
+(def ^:private db-conn (sqlite3/Database. db-path))
+
+
+
 ;; Turns this:
 ;;
-;; {:icao "DEADBF" :last_post_time "2019-04-15T22:17:41.778-00:00"
+;; {:icao "DEADBF" :last_post_time "2019-04-15T22:17:41.778-00:00"}
 ;;
 ;; into this:
 ;;
-;; {:icao "DEADBF" :last-post-time #inst "2019-04-15T22:17:41.778-00:00"
+;; {:icao "DEADBF" :last-post-time #inst "2019-04-15T22:17:41.778-00:00"}
 
 (defn- parse-record [rec]
   (let [new-rec (reduce (fn [m k]
