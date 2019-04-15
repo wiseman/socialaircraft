@@ -7,20 +7,16 @@
             ["fs" :as fs]
             ["sqlite3" :as sqlite3]))
 
-(defonce db_ (atom nil))
+(def ^:private db-path "socialaircraft.db")
+(def ^:private db-conn (sqlite3/Database. db-path))
 
-(def db-path "socialaircraft.db")
-(def db-conn (sqlite3/Database. db-path))
-
-(def setup-sql "
+(def ^:private setup-sql "
   CREATE TABLE aircraft (
     icao TEXT NOT NULL PRIMARY KEY,
     last_post_time TEXT
   );
   ")
 
-(defn db-exists? []
-  (fs/existsSync db-path))
 
 (defn init-db []
   (println "Initializing database...")
@@ -34,7 +30,16 @@
              (println "Database initialized.")
              (.close db-conn))))))
 
-(defn parse-record [rec]
+
+;; Turns this:
+;;
+;; {:icao "DEADBF" :last_post_time "2019-04-15T22:17:41.778-00:00"
+;;
+;; into this:
+;;
+;; {:icao "DEADBF" :last-post-time #inst "2019-04-15T22:17:41.778-00:00"
+
+(defn- parse-record [rec]
   (let [new-rec (reduce (fn [m k]
                   (assoc m (-> k csk/->kebab-case keyword) (gobject/get rec k)))
                 {}
@@ -43,10 +48,20 @@
       (assoc new-rec :last-post-time (js/Date. (:last-post-time new-rec)))
       new-rec)))
 
-(defn in-operator-helper [values]
+
+;; Given a list (a, b, c, ...), returns a string "(?, ?, ?, ...)". For
+;; use with SQL queries using the IN operator.
+
+(defn- in-operator-helper [values]
   (str "(" (string/join ", " (repeat (count values) "?")) ")"))
 
-(defn get-aircraft& [icaos]
+
+(defn get-aircraft&
+  "Fetches DB records for the specified aircraft.
+
+  Given a collection of ICAOs, returns a channel that will be sent the
+  collection of corresponding records."
+  [icaos]
   (println "Looking for" (count icaos) "aircraft in database")
   (let [sql (str "SELECT * from aircraft where icao in "
                  (in-operator-helper icaos))
@@ -63,7 +78,9 @@
     chan))
 
 
-(defn record-post [icao]
+(defn record-post
+  "Records the fact that we made a post in the DB."
+  [icao]
   (.run
    db-conn
    (str "INSERT INTO aircraft (icao, last_post_time) "
@@ -71,11 +88,4 @@
         "ON CONFLICT (icao) "
         "DO UPDATE SET last_post_time = excluded.last_post_time")
    icao
-   (.toISOString (js/Date.))
-   ;; (let [icao (:icao post)
-   ;;       new-rec {:icao icao :last-post-time (js/Date.)}]
-   ;;   (if (@db_ icao)
-   ;;     (insert-record new-rec)
-   ;;     (update-record new-rec))
-   ;;   (swap! db_ assoc icao new-rec))
-   ))
+   (.toISOString (js/Date.))))

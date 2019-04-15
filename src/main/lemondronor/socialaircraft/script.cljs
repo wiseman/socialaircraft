@@ -13,10 +13,11 @@
 
 ;; See https://github.com/r0man/cljs-http/issues/94#issuecomment-426442569
 (set! js/XMLHttpRequest xhr2)
-(set! js/console.warn (fn [& args]))
 
-;;(def diff (differ))
-;;(.pipe diff js/process.stdout)
+;; Hide the the "Discarding entity body for GET requests" warning that
+;; xhr2 prints when used from cljs-http. See
+;; https://github.com/r0man/cljs-http/issues/94#issuecomment-482755066
+(set! js/console.warn (fn [& args]))
 
 (def data-url "https://vrs.heavymeta.org/VirtualRadar/AircraftList.json")
 (def data-fetch-interval-ms 1000)
@@ -28,54 +29,54 @@
       (str "<" icao " " reg ">")
       (str "<" icao ">"))))
 
-(defn format-record [rec]
-  (gstring/format
-   "%6s %8s %6.1f %5d %5.1f %7.2f %7.2f"
-   (rec :Icao)
-   (rec :Reg "[unk]")
-   (rec :Spd -1.0)
-   (rec :Alt -1)
-   (rec :Trak -1)
-   (rec :Lat 0)
-   (rec :Long 0)))
+;; (defn format-record [rec]
+;;   (gstring/format
+;;    "%6s %8s %6.1f %5d %5.1f %7.2f %7.2f"
+;;    (rec :Icao)
+;;    (rec :Reg "[unk]")
+;;    (rec :Spd -1.0)
+;;    (rec :Alt -1)
+;;    (rec :Trak -1)
+;;    (rec :Lat 0)
+;;    (rec :Long 0)))
 
-(defn format-field [row field-spec]
-  (if (coll? field-spec)
-    (let [[field fmt] field-spec]
-      (if-let [val (row field)]
-        (gstring/format fmt val)
-        ""))
-    (row field-spec "")))
+;; (defn format-field [row field-spec]
+;;   (if (coll? field-spec)
+;;     (let [[field fmt] field-spec]
+;;       (if-let [val (row field)]
+;;         (gstring/format fmt val)
+;;         ""))
+;;     (row field-spec "")))
 
-(defn format-row [row template fields]
-  (apply gstring/format template (map #(format-field row %) fields)))
+;; (defn format-row [row template fields]
+;;   (apply gstring/format template (map #(format-field row %) fields)))
 
-(def table-template "%6s %8s %6s %5s %5s %7s %7s")
+;; (def table-template "%6s %8s %6s %5s %5s %7s %7s")
 
-(defn format-aircraft-record [rec]
-  (format-row
-   rec
-   table-template
-   [:Icao :Reg [:Spd "%6.1f"] [:Alt "%5d"] [:Trak "%5.1f"] [:Lat "%7.2f"] [:Long "%7.2f"]]))
+;; (defn format-aircraft-record [rec]
+;;   (format-row
+;;    rec
+;;    table-template
+;;    [:Icao :Reg [:Spd "%6.1f"] [:Alt "%5d"] [:Trak "%5.1f"] [:Lat "%7.2f"] [:Long "%7.2f"]]))
 
-(defn table-header []
-  (gstring/format table-template "ICAO" "REG" "SPD" "ALT" "HDG" "LAT" "LON"))
+;; (defn table-header []
+;;   (gstring/format table-template "ICAO" "REG" "SPD" "ALT" "HDG" "LAT" "LON"))
 
-(defn fetch-and-process-data []
-  (go (let [response (<! (http/get data-url))
-            all-aircraft (-> response :body :acList)
-            report-lines (->> all-aircraft
-                              (take 50)
-                              (map format-aircraft-record))
-            report-text (string/join "\n" (conj report-lines (table-header)))]
-        ;;(.write diff report-text)
-        )))
+;; (defn fetch-and-process-data []
+;;   (go (let [response (<! (http/get data-url))
+;;             all-aircraft (-> response :body :acList)
+;;             report-lines (->> all-aircraft
+;;                               (take 50)
+;;                               (map format-aircraft-record))
+;;             report-text (string/join "\n" (conj report-lines (table-header)))]
+;;         ;;(.write diff report-text)
+;;         )))
 
 
-(defn process-loop []
-  (println "Process loop")
-  (fetch-and-process-data)
-  (js/setInterval process-loop data-fetch-interval-ms))
+;; (defn process-loop []
+;;   (println "Process loop")
+;;   (fetch-and-process-data)
+;;   (js/setInterval process-loop data-fetch-interval-ms))
 
 
 (defn get-flying-aircraft& []
@@ -87,11 +88,17 @@
       (util/index-by :Icao all-aircraft))))>
 
 
-(defn build-post [ac hist]
+(defn build-post
+  "Creates an activity post data structure for an aircraft."
+  [ac hist]
+  ;; FIXME: dummy.
   {:type :post :icao (:Icao ac) :data ac})
 
 
-(defn make-post [post]
+(defn make-post
+  "Submits a post."
+  [post]
+  ;; FIXME: dummy.
   (println (gstring/format "Posting about %s" (:icao post)))
   (db/record-post (:icao post)))
 
@@ -129,6 +136,8 @@
         (run)
         :else
         (println "Available commands: init-db"))
+  ;; Why isn't my node process exiting? (shadow-cljs dev mode starts a REPL,
+  ;; that's why.
   ;;(println (._getActiveHandles js/process))
   ;;(println (._getActiveRequests js/process))
   )
