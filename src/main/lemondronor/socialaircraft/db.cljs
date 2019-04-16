@@ -41,7 +41,6 @@
 (def ^:private db-conn (sqlite3/Database. db-path))
 
 
-
 ;; Turns this:
 ;;
 ;; {:icao "DEADBF" :last_post_time "2019-04-15T22:17:41.778-00:00"}

@@ -4,6 +4,7 @@
             [cljs-http.client :as http]
             [cljs.core.async :refer [<!]]
             [lemondronor.socialaircraft.db :as db]
+            [lemondronor.socialaircraft.posts :as posts]
             [lemondronor.socialaircraft.util :as util]
             [goog.string :as gstring]
             [goog.string.format]
@@ -92,14 +93,16 @@
   "Creates an activity post data structure for an aircraft."
   [ac hist]
   ;; FIXME: dummy.
-  {:type :post :icao (:Icao ac) :data ac})
+  ;;{:type :post :icao (:Icao ac) :data ac :text (posts/choose-template ac)}
+  )
 
 
 (defn make-post
   "Submits a post."
   [post]
   ;; FIXME: dummy.
-  (println (gstring/format "Posting about %s" (:icao post)))
+  (println (gstring/format "Posting about %s:" (:icao post)))
+  (println "++++++++++" (:text post))
   (db/record-post (:icao post)))
 
 

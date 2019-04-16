@@ -6,10 +6,18 @@
 
  :dependencies
  [[camel-snake-kebab "0.4.0"]
-  [cljs-http "0.1.46"]]
+  [cljs-http "0.1.46"]
+  [cljstache "2.0.1"]
+  [instaparse "1.4.10"]
+  [org.clojure/math.combinatorics "0.1.5"]]
 
  :builds
  {:script
   {:target :node-script
    :main lemondronor.socialaircraft.script/main
-   :output-to "out/script.js"}}}
+   :output-to "out/script.js"}
+  :test
+  {:target    :node-test
+   :output-to "out/node-tests.js"
+   ;;:ns-regexp "-spec$"
+   :autorun   true}}}
