@@ -93,20 +93,18 @@
   "Creates an activity post data structure for an aircraft."
   [ac hist]
   ;; FIXME: dummy.
-  ;;{:type :post :icao (:Icao ac) :data ac :text (posts/choose-template ac)}
-  )
+  {:type :post :icao (:Icao ac) :data ac :text (posts/weighted-rand-post ac)})
 
 
 (defn make-post
   "Submits a post."
   [post]
   ;; FIXME: dummy.
-  (println (gstring/format "Posting about %s:" (:icao post)))
-  (println "++++++++++" (:text post))
+  (println (gstring/format "Posting about %s: %s" (:icao post) (:text post)))
   (db/record-post (:icao post)))
 
 
-(def posting-interval-ms (* 10 1000))
+(def posting-interval-ms (* 60 1000))
 
 (defn process-current-aircraft [ac history]
   ;;o(println "Processing" (ac-short-desc ac))

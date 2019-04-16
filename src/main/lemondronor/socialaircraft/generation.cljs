@@ -80,8 +80,16 @@
         chains (apply combo/cartesian-product things)]
     (map merge-expansions chains)))
 
+(defn score-fragments [fragments]
+  (let [scored-fragments (->> (map (fn [f]
+                                     [(count (:varrefs f)) f])
+                                   fragments)
+                              (sort-by first)
+                              reverse)]
+    scored-fragments))
 
 (defn generate [template data]
-  (let [results (generate-fragments template data)
-        best-result (first results)]
-    best-result))
+  (let [fragments (generate-fragments template data)
+        scored-fragments (score-fragments fragments)
+        best-fragment (second (first scored-fragments))]
+    (:text best-fragment)))

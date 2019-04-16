@@ -2,28 +2,36 @@
   (:require
             [clojure.pprint :as pprint]
             [clojure.set :as set]
-            [lemondronor.socialaircraft.generation :as generation]))
+            [clojure.string :as string]
+            [lemondronor.socialaircraft.generation :as generation]
+            [lemondronor.socialaircraft.util :as util]))
 
 
-;; (defn score-template [template-vars data-fields]
-;;   (let [expected (set/intersection (set template-vars) data-fields)
-;;         missing (set/difference (set template-vars) data-fields)]
-;;     (if (empty? missing)
-;;       (count expected)
-;;       -1000)))
+(def templates
+  [(str "[{Reg} here.|{Reg} is on the move.|Looking for {Reg}?] "
+        "?:[I'm on the way to {To} from {From}. ]"
+        "?:[Just cruising along at {Spd} knots, {Alt} feet. |"
+        "Doing {Spd} knots at {Alt} feet. |"
+        "{Alt} feet, {Spd} knots. ]"
+        "?:[Current course {Trak} degrees. |Heading {Trak} degrees. ]"
+        "?:[Squawking {Sqk}. ]")
+   "Aircraft with unknown registration, ICAO {Icao} is present."])
+
+(def parsed-templates (map generation/parse-template templates))
 
 
-;; (defn choose-template [data]
-;;   (let [data-fields (set (keys data))
-;;         scored-templates (reverse
-;;                           (sort-by
-;;                            first
-;;                            (map (fn [[template-vars templates]]
-;;                                   [(score-template template-vars data-fields) templates])
-;;                                 all-templates)))]
-;;     (doseq [t scored-templates]
-;;       (println t))
-;;     (let [best-template (rand-nth (second (first scored-templates)))]
-;;       (template/render best-template data))))
+(defn generate-all [data template]
+  (let [scored-fragments (generation/score-fragments
+                          (generation/generate-fragments
+                           template
+                           data))]
+    (map (fn [[score frag]]
+           {:score score :text (string/trim (:text frag))})
+         scored-fragments)))
 
-
+(defn weighted-rand-post [data]
+  (let [scored-templates (apply concat (map #(generate-all data %) parsed-templates))
+        winning-index (util/weighted-rand (mapv :score scored-templates))
+        winning-text (:text (nth scored-templates winning-index))]
+    (println "Chose template with score" (:score (nth scored-templates winning-index)))
+    winning-text))

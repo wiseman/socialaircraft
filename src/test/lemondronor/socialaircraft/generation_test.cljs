@@ -24,10 +24,9 @@
 
 (deftest text-test
   (is (= "Hello!"
-         (:text
-          (generation/generate
-           (generation/parse-template "Hello!")
-           {})))))
+         (generation/generate
+          (generation/parse-template "Hello!")
+          {}))))
 
 (deftest generate-test
   (is (= [{:varrefs [], :text ""} {:varrefs [], :text "woo"}]
