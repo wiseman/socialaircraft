@@ -3,7 +3,7 @@
             [clojure.string :as string]
             [instaparse.core :as insta]))
 
-(def %parse-template
+(def ^:private %parse-template
   (insta/parser
    "<pattern> = term | implicit-sequence
     implicit-sequence = term (term)+
@@ -18,8 +18,9 @@
 "))
 
 
-(defn lex-template [template]
+(defn ^:private lex-template [template]
   (string/replace template "?:" "⁇"))
+
 
 (defn parse-template [template]
   (let [result (-> template lex-template %parse-template)
@@ -37,22 +38,16 @@
       (into [:sequence] xformed-result))))
 
 
-;; (pprint/pprint
-;;  (parser
-;;   (str "Hey it's {Reg} here. ✈ ✈️?:[Just flying to {To} from {From}.] "
-;;        "?:[[Currently cruising at {Spd} knots at {Alt} feet.]|"
-;;        "[Currently cruising at {Spd} knots.]|"
-;;        "[Currently cruising at {Alt} feet.]]")))
-
 (defmulti generate-fragments (fn [template data]
                                (first template)))
 
 (defmethod generate-fragments :varref [template data]
-  (let [var (keyword (second template))]
-    (if (contains? data var)
+  (let [var (keyword (second template))
+        val (data var)]
+    (if (or (nil? val) (= val ""))
+      '()
       (list {:varrefs [var]
-             :text (str (data var))})
-      '())))
+             :text (str (data var))}))))
 
 (defmethod generate-fragments :text [template data]
   (list {:varrefs []
@@ -80,6 +75,7 @@
         chains (apply combo/cartesian-product things)]
     (map merge-expansions chains)))
 
+
 (defn score-fragments [fragments]
   (let [scored-fragments (->> (map (fn [f]
                                      [(count (:varrefs f)) f])
@@ -87,6 +83,7 @@
                               (sort-by first)
                               reverse)]
     scored-fragments))
+
 
 (defn generate [template data]
   (let [fragments (generate-fragments template data)

@@ -30,55 +30,6 @@
       (str "<" icao " " reg ">")
       (str "<" icao ">"))))
 
-;; (defn format-record [rec]
-;;   (gstring/format
-;;    "%6s %8s %6.1f %5d %5.1f %7.2f %7.2f"
-;;    (rec :Icao)
-;;    (rec :Reg "[unk]")
-;;    (rec :Spd -1.0)
-;;    (rec :Alt -1)
-;;    (rec :Trak -1)
-;;    (rec :Lat 0)
-;;    (rec :Long 0)))
-
-;; (defn format-field [row field-spec]
-;;   (if (coll? field-spec)
-;;     (let [[field fmt] field-spec]
-;;       (if-let [val (row field)]
-;;         (gstring/format fmt val)
-;;         ""))
-;;     (row field-spec "")))
-
-;; (defn format-row [row template fields]
-;;   (apply gstring/format template (map #(format-field row %) fields)))
-
-;; (def table-template "%6s %8s %6s %5s %5s %7s %7s")
-
-;; (defn format-aircraft-record [rec]
-;;   (format-row
-;;    rec
-;;    table-template
-;;    [:Icao :Reg [:Spd "%6.1f"] [:Alt "%5d"] [:Trak "%5.1f"] [:Lat "%7.2f"] [:Long "%7.2f"]]))
-
-;; (defn table-header []
-;;   (gstring/format table-template "ICAO" "REG" "SPD" "ALT" "HDG" "LAT" "LON"))
-
-;; (defn fetch-and-process-data []
-;;   (go (let [response (<! (http/get data-url))
-;;             all-aircraft (-> response :body :acList)
-;;             report-lines (->> all-aircraft
-;;                               (take 50)
-;;                               (map format-aircraft-record))
-;;             report-text (string/join "\n" (conj report-lines (table-header)))]
-;;         ;;(.write diff report-text)
-;;         )))
-
-
-;; (defn process-loop []
-;;   (println "Process loop")
-;;   (fetch-and-process-data)
-;;   (js/setInterval process-loop data-fetch-interval-ms))
-
 
 (defn get-flying-aircraft& []
   (println "Fetching aircraft from" data-url)
@@ -106,12 +57,18 @@
 
 (def posting-interval-ms (* 60 1000))
 
+
+(defn annotate-ac-for-post [ac]
+  (cond-> ac
+    (= (:Reg ac) (:Call ac)) (dissoc :Call)))
+
+
 (defn process-current-aircraft [ac history]
   ;;o(println "Processing" (ac-short-desc ac))
   (let [last-post-time (:last-post-time history)]
     (when (or (nil? last-post-time)
               (> (- (js/Date.) last-post-time) posting-interval-ms))
-      (let [post (build-post ac history)]
+      (let [post (build-post (annotate-ac-for-post ac) history)]
         (make-post post)))))
 
 (defn process-flying-aircraft [flying history]
@@ -133,7 +90,7 @@
 (defn main [& args]
   (run)
   ;; Why isn't my node process exiting? (shadow-cljs dev mode starts a REPL,
-  ;; that's why.
+  ;; that's why.)
   ;;(println (._getActiveHandles js/process))
   ;;(println (._getActiveRequests js/process))
   )

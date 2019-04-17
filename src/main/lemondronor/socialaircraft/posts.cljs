@@ -8,7 +8,8 @@
 
 
 (def templates
-  [(str "[{Reg} here.|{Reg} is on the move.|Looking for {Reg}?] "
+  [(str "[{Reg} here.|{Reg} is on the move.|{Reg} is in the air.] "
+        "?:[Callsign {Call}. |Callsign is {Call}. | Using callsign {Call}. ]"
         "?:[I'm on the way to {To} from {From}. ]"
         "?:[Just cruising along at {Spd} knots, {Alt} feet. |"
         "Doing {Spd} knots at {Alt} feet. |"
@@ -33,5 +34,9 @@
   (let [scored-templates (apply concat (map #(generate-all data %) parsed-templates))
         winning-index (util/weighted-rand (mapv :score scored-templates))
         winning-text (:text (nth scored-templates winning-index))]
-    (println "Chose template with score" (:score (nth scored-templates winning-index)))
     winning-text))
+
+(defn best-post [data]
+  (let [scored-templates (apply concat (map #(generate-all data %) parsed-templates))
+        winning-template (first scored-templates)]
+    (:text winning-template)))
