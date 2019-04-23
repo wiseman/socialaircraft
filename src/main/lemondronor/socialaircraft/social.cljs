@@ -1,65 +1,96 @@
 (ns lemondronor.socialaircraft.social
   (:require
+   [cljs.core.async :as async]
    [lemondronor.socialaircraft.db :as db]
    ["generate-password" :as genpassword]
    ["mastodon-api" :as mastodon]
    ["oauth" :as oauth]
+   ["puppeteer" :as puppeteer]
    ["readline" :as readline]))
 
 (def oauth2 (.-OAuth2 oauth))
 
-(def base-url "http://ubuntuservervm.local:4000/api/v1/apps")
+(def base-url "http://ubuntuservervm.local:4000/")
+(def app-name "socialaircraft")
+(def permissions "read write follow")
 
-;; Taken from
+;; This is a combination of code form
 ;; https://github.com/vanita5/mastodon-api/blob/master/examples/authorization.js
-;; Unfortunately I couldn't get it to work--The authorization URL
-;; doesn't give me an access token.
-
-;; (defn authorize []
-;;   (-> mastodon
-;;       (.createOAuthApp base-url "socialaircraft" "read write")
-;;       (.catch (fn [err] (println "Error:" err)))
-;;       (.then (fn [res]
-;;                (println "Got result" res)
-;;                (let [res (js->clj res)
-;;                      client-secret (:client_secret res)
-;;                      client-id (:client_id res)
-;;                      redirect-uri (:redirect_uri res)]
-;;                  (.getAuthorizationUrl mastodon client-id client-secret base-url "read write" redirect-uri))))
-;;       (.then (fn [url]
-;;                (println "Authorization URL:" url)))))
-
-;; This does work. Taken from
+;; and
 ;; https://github.com/jhayley/node-mastodon/wiki/Getting-an-access_token-with-the-oauth-package
-;; (I got the client ID and client secret from the code above.)
 
-(defn authorize []
-  (let [oauth (oauth2. "JUglOqlDS_fFDdfFPEiXWVsca_SecHNbwsG_TZEvGZ8"
-                       "WzYsdz7YpsdBv-5bAnX1z3KTMboGOkxogOfyIBzWCDU"
-                       "http://ubuntuservervm.local:4000"
-                       nil
-                       "/oauth/token")]
-    (println (.getAuthorizeUrl oauth #js {"redirect_uri" "urn:ietf:wg:oauth:2.0:oob"
-                                          "response_type" "code"
-                                          "scope" "read write follow"}))
-    (let [rl (.createInterface readline #js {:input (.-stdin js/process)
-                                             :output (.-stdout js/process)})]
-      (.question rl "What is the code? "
-                 (fn [answer]
-                   (.getOAuthAccessToken
-                    oauth
-                    answer
-                    #js {"grant_type" "authorization_code"
-                         "redirect_uri" "urn:ietf:wg:oauth:2.0:oob"}
-                    (fn [err access-token refresh-token res]
-                      (println "err" err)
-                      (println "access" access-token)
-                      (println "refresh" refresh-token)
-                      (println "res" res))))))))
+(def ^:private oauth-redirect-uri "urn:ietf:wg:oauth:2.0:oob")
 
-(defn fetch-access-token []
-  ()
-  )
+
+(defn get-app-authorization& []
+  (let [chan (async/chan)]
+    (-> mastodon
+        ;; Get client ID and client secret.
+        (.createOAuthApp (str base-url "api/v1/apps") app-name permissions)
+        (.catch (fn [err] (println "createOAuthApp error:" err)))
+        (.then (fn [response]
+                 (println "Got createOAuthApp response" response)
+                 ;; Get authorization URL.
+                 (let [res (js->clj response :keywordize-keys true)
+                       client-id (:client_id res)
+                       client-secret (:client_secret res)
+                       redirect-uri (:redirect_uri res)
+                       oauth (oauth2. client-id client-secret
+                                      base-url nil "/oauth/token")]
+                   (println "client_id:" client-id "client_secret" client-secret)
+                   (let [url (.getAuthorizeUrl oauth #js {"redirect_uri" oauth-redirect-uri
+                                                          "response_type" "code"
+                                                          "scope" permissions})]
+                     (println "Authorization URL:" url)
+                     (async/put! chan {:oauth oauth :url url}))))))
+    chan))
+
+
+(def browser_ (atom nil))
+
+(defn get-browser& []
+  (let [chan (async/chan)]
+    (if @browser_
+      (async/put! chan @browser_)
+      (-> (.launch puppeteer #js {:headless true})
+          (.catch (fn [err] (println "PUPPETEER ERROR:" err)))
+          (.then (fn [browser]
+                   (reset! browser_ browser)
+                   (async/put! chan browser)))))
+    chan))
+
+
+(defn get-oauth-token [user password]
+  (println "Getting oauth token for user" user)
+  (async/go
+    (let [{:keys [oauth url]} (async/<! (get-app-authorization&))
+          page_ (atom nil)
+          browser (async/<! (get-browser&))]
+      (-> (.newPage browser)
+          (.catch (fn [err]
+                    (println "puppeteer error:" err)))
+          (.then (fn [page]
+                   (reset! page_ page)
+                   (.goto page url)))
+          (.then (fn [res] (.click @page_ "#authorization_name")))
+          (.then (fn [res] (-> @page_ .-keyboard (.type user))))
+          (.then (fn [res] (.click @page_ "#authorization_password")))
+          (.then (fn [res] (-> @page_ .-keyboard (.type password))))
+          (.then (fn [res] (.all js/Promise
+                                 [(.waitForNavigation @page_)
+                                  (.click @page_ "form > button")])))
+          (.then (fn [[res]]
+                   (if (.ok res)
+                     (do
+                       (println "SUCCESS")
+                       (.$ @page_ "h2"))
+                     (println "OOPS" (.statusText res) (.text res)))))
+          (.then (fn [el]
+                   (.$eval @page_ "h2" (fn [el] (.-innerText el)))))
+          (.then (fn [text]
+                   (.close @page_)
+                   (let [token (second (re-find #"Token code is (.+)" text))]
+                     (println "holy shit" token))))))))
 
 
 ;; But see

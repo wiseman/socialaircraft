@@ -98,9 +98,10 @@
 
 
 (defn main [& args]
-  (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
-    (println "CONFIG" config)
-    (social/create-new-account (:pleroma config) {:Reg "TEST"}))
+  (social/get-oauth-token "wiseman" "wiseman")
+  ;; (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
+  ;;   (println "CONFIG" config)
+  ;;   (social/create-new-account (:pleroma config) {:Reg "TEST2"}))
   ;;(social/authorize)
   ;;(run)
   ;; Why isn't my node process exiting? (shadow-cljs dev mode starts a REPL,
