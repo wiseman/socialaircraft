@@ -1,16 +1,20 @@
 (ns lemondronor.socialaircraft.script
   (:require-macros [cljs.core.async.macros :refer [go]])
-  (:require [clojure.string :as string]
-            [cljs-http.client :as http]
-            [cljs.core.async :refer [<!]]
-            [lemondronor.socialaircraft.db :as db]
-            [lemondronor.socialaircraft.posts :as posts]
-            [lemondronor.socialaircraft.util :as util]
-            [goog.string :as gstring]
-            [goog.string.format]
-            ["ansi-diff-stream" :as differ]
-            ["sqlite3" :as sqlite3]
-            ["xhr2" :as xhr2]))
+  (:require
+   [cljs-http.client :as http]
+   [cljs.core.async :refer [<!]]
+   [cljs.reader :as edn]
+   [clojure.string :as string]
+   [goog.string :as gstring]
+   [goog.string.format]
+   [lemondronor.socialaircraft.db :as db]
+   [lemondronor.socialaircraft.posts :as posts]
+   [lemondronor.socialaircraft.social :as social]
+   [lemondronor.socialaircraft.util :as util]
+   ["ansi-diff-stream" :as differ]
+   ["fs" :as fs]
+   ["sqlite3" :as sqlite3]
+   ["xhr2" :as xhr2]))
 
 ;; See https://github.com/r0man/cljs-http/issues/94#issuecomment-426442569
 (set! js/XMLHttpRequest xhr2)
@@ -63,17 +67,17 @@
     (= (:Reg ac) (:Call ac)) (dissoc :Call)))
 
 
-(defn process-current-aircraft [ac history]
+(defn process-current-aircraft [ac db]
   ;;o(println "Processing" (ac-short-desc ac))
-  (let [last-post-time (:last-post-time history)]
+  (let [last-post-time (:last-post-time db)]
     (when (or (nil? last-post-time)
               (> (- (js/Date.) last-post-time) posting-interval-ms))
-      (let [post (build-post (annotate-ac-for-post ac) history)]
+      (let [post (build-post (annotate-ac-for-post ac) db)]
         (make-post post)))))
 
-(defn process-flying-aircraft [flying history]
+(defn process-flying-aircraft [flying db]
   (doseq [[icao ac] flying]
-    (process-current-aircraft ac (history icao))))
+    (process-current-aircraft ac (db icao))))
 
 (defn process-stale-aircraft [flying])
 
@@ -81,14 +85,24 @@
   (println "Processing aircraft")
   (go
     (let [flying-ac (<! (get-flying-aircraft&))
-          flying-ac-history (<! (db/get-aircraft& (keys flying-ac)))]
-      (process-flying-aircraft flying-ac flying-ac-history)
+          flying-ac-db (<! (db/get-aircraft& (keys flying-ac)))]
+      (process-flying-aircraft flying-ac flying-ac-db)
       (process-stale-aircraft flying-ac)))
   (js/setTimeout run 5000))
 
 
+(defn config-path []
+  (or (first *command-line-args*)
+      (-> js/process .-env .-MASTODON_BOT_CONFIG)
+      "config.edn"))
+
+
 (defn main [& args]
-  (run)
+  (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
+    (println "CONFIG" config)
+    (social/create-new-account (:pleroma config) {:Reg "TEST"}))
+  ;;(social/authorize)
+  ;;(run)
   ;; Why isn't my node process exiting? (shadow-cljs dev mode starts a REPL,
   ;; that's why.)
   ;;(println (._getActiveHandles js/process))

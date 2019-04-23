@@ -26,6 +26,19 @@
         (recur (inc i) (+ (slices i) sum))))))
 
 
+(defn weighted-rand-nth
+  "given a vector of slice sizes, returns the index of a slice given a
+  random spin of a roulette wheel with compartments proportional to
+  slices."
+  ([coll]
+   (weighted-rand-nth coll identity))
+  ([coll keyfn]
+   (->> coll
+        (map keyfn)
+        weighted-rand
+        (nth coll))))
+
+
 (defn bearing-to [loc1 loc2]
   (let [radians (fn [deg] (* deg (/ Math/PI 180.0)))
         degrees (fn [rad] (* rad (/ 180.0 Math/PI)))]

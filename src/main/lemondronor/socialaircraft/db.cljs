@@ -10,7 +10,8 @@
 (def ^:private setup-sql "
   CREATE TABLE aircraft (
     icao TEXT NOT NULL PRIMARY KEY,
-    last_post_time TEXT
+    last_post_time TEXT,
+    social_access_token TEXT
   );
   ")
 
@@ -51,9 +52,9 @@
 
 (defn- parse-record [rec]
   (let [new-rec (reduce (fn [m k]
-                  (assoc m (-> k csk/->kebab-case keyword) (gobject/get rec k)))
-                {}
-                (js-keys rec))]
+                          (assoc m (-> k csk/->kebab-case keyword) (gobject/get rec k)))
+                        {}
+                        (js-keys rec))]
     (if (:last-post-time new-rec)
       (assoc new-rec :last-post-time (js/Date. (:last-post-time new-rec)))
       new-rec)))
@@ -99,3 +100,14 @@
         "DO UPDATE SET last_post_time = excluded.last_post_time")
    icao
    (.toISOString (js/Date.))))
+
+
+(defn record-social-access-token [icao token]
+  (.run
+   db-conn
+   (str "INSERT INTO aircraft (icao, social_access_token) "
+        "VALUES (?, ?) "
+        "ON CONFLICT (icao) "
+        "DO UPDATE SET social_access_token = excluded.social_access_token")
+   icao
+   token))

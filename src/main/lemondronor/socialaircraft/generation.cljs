@@ -18,6 +18,11 @@
 "))
 
 
+;; Because I don't know enough to write the correct negative-lookahead
+;; regex so that "?:" doesn't get parsed into a `text` or
+;; `no-ws-text`, I lex it into a unicode character that I'm sure no
+;; one will ever use (right?).
+
 (defn ^:private lex-template [template]
   (string/replace template "?:" "⁇"))
 
@@ -38,25 +43,20 @@
       (into [:sequence] xformed-result))))
 
 
-(defmulti generate-fragments (fn [template data]
-                               (first template)))
+(defmulti generate-fragments (fn [template data] (first template)))
 
 (defmethod generate-fragments :varref [template data]
   (let [var (keyword (second template))
         val (data var)]
     (if (or (nil? val) (= val ""))
       '()
-      (list {:varrefs [var]
-             :text (str (data var))}))))
+      (list {:varrefs [var] :text (str (data var))}))))
 
 (defmethod generate-fragments :text [template data]
-  (list {:varrefs []
-         :text (second template)}))
+  (list {:varrefs [] :text (second template)}))
 
 (defmethod generate-fragments :optional [template data]
-  (concat (list
-           {:varrefs []
-            :text ""})
+  (concat (list {:varrefs [] :text ""})
           (generate-fragments (second template) data)))
 
 (defmethod generate-fragments :choice [template data]
@@ -64,11 +64,9 @@
 
 (defmethod generate-fragments :sequence [template data]
   (let [merge-expansions1 (fn
-                            ([a]
-                             a)
-                            ([a b]
-                             {:varrefs (concat (:varrefs a) (:varrefs b))
-                              :text (str (:text a) (:text b))}))
+                            ([a] a)
+                            ([a b] {:varrefs (concat (:varrefs a) (:varrefs b))
+                                    :text (str (:text a) (:text b))}))
         merge-expansions (fn [args]
                            (reduce merge-expansions1 args))
         things (map #(generate-fragments % data) (rest template))
@@ -76,9 +74,11 @@
     (map merge-expansions chains)))
 
 
+;; A simple fragment scorer that gives high scores to fragments that
+;; used more variables.
+
 (defn score-fragments [fragments]
-  (let [scored-fragments (->> (map (fn [f]
-                                     [(count (:varrefs f)) f])
+  (let [scored-fragments (->> (map (fn [f] [(count (:varrefs f)) f])
                                    fragments)
                               (sort-by first)
                               reverse)]

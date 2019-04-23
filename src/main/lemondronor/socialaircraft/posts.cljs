@@ -12,8 +12,8 @@
         "?:[Callsign {Call}. |Callsign is {Call}. | Using callsign {Call}. ]"
         "?:[I'm on the way to {To} from {From}. ]"
         "?:[Just cruising along at {Spd} knots, {Alt} feet. |"
-        "Doing {Spd} knots at {Alt} feet. |"
-        "{Alt} feet, {Spd} knots. ]"
+        "   Doing {Spd} knots at {Alt} feet. |"
+        "   {Alt} feet, {Spd} knots. ]"
         "?:[Current course {Trak} degrees. |Heading {Trak} degrees. ]"
         "?:[Squawking {Sqk}. ]")
    "Aircraft with unknown registration, ICAO {Icao} is present."])
@@ -31,10 +31,8 @@
          scored-fragments)))
 
 (defn weighted-rand-post [data]
-  (let [scored-templates (apply concat (map #(generate-all data %) parsed-templates))
-        winning-index (util/weighted-rand (mapv :score scored-templates))
-        winning-text (:text (nth scored-templates winning-index))]
-    winning-text))
+  (let [scored-templates (apply concat (map #(generate-all data %) parsed-templates))]
+    (:text (util/weighted-rand-nth scored-templates :score))))
 
 (defn best-post [data]
   (let [scored-templates (apply concat (map #(generate-all data %) parsed-templates))
