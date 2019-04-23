@@ -60,37 +60,40 @@
     chan))
 
 
-(defn get-oauth-token [user password]
+(defn get-oauth-token& [user password]
   (println "Getting oauth token for user" user)
-  (async/go
-    (let [{:keys [oauth url]} (async/<! (get-app-authorization&))
-          page_ (atom nil)
-          browser (async/<! (get-browser&))]
-      (-> (.newPage browser)
-          (.catch (fn [err]
-                    (println "puppeteer error:" err)))
-          (.then (fn [page]
-                   (reset! page_ page)
-                   (.goto page url)))
-          (.then (fn [res] (.click @page_ "#authorization_name")))
-          (.then (fn [res] (-> @page_ .-keyboard (.type user))))
-          (.then (fn [res] (.click @page_ "#authorization_password")))
-          (.then (fn [res] (-> @page_ .-keyboard (.type password))))
-          (.then (fn [res] (.all js/Promise
-                                 [(.waitForNavigation @page_)
-                                  (.click @page_ "form > button")])))
-          (.then (fn [[res]]
-                   (if (.ok res)
-                     (do
-                       (println "SUCCESS")
-                       (.$ @page_ "h2"))
-                     (println "OOPS" (.statusText res) (.text res)))))
-          (.then (fn [el]
-                   (.$eval @page_ "h2" (fn [el] (.-innerText el)))))
-          (.then (fn [text]
-                   (.close @page_)
-                   (let [token (second (re-find #"Token code is (.+)" text))]
-                     (println "holy shit" token))))))))
+  (let [chan (async/chan)]
+    (async/go
+      (let [{:keys [oauth url]} (async/<! (get-app-authorization&))
+            page_ (atom nil)
+            browser (async/<! (get-browser&))]
+        (-> (.newPage browser)
+            (.catch (fn [err]
+                      (println "puppeteer error:" err)))
+            (.then (fn [page]
+                     (reset! page_ page)
+                     (.goto page url)))
+            (.then (fn [res] (.click @page_ "#authorization_name")))
+            (.then (fn [res] (-> @page_ .-keyboard (.type user))))
+            (.then (fn [res] (.click @page_ "#authorization_password")))
+            (.then (fn [res] (-> @page_ .-keyboard (.type password))))
+            (.then (fn [res] (.all js/Promise
+                                   [(.waitForNavigation @page_)
+                                    (.click @page_ "form > button")])))
+            (.then (fn [[res]]
+                     (if (.ok res)
+                       (do
+                         (println "SUCCESS")
+                         (.$ @page_ "h2"))
+                       (println "OOPS" (.statusText res) (.text res)))))
+            (.then (fn [el]
+                     (.$eval @page_ "h2" (fn [el] (.-innerText el)))))
+            (.then (fn [text]
+                     (.close @page_)
+                     (let [token (second (re-find #"Token code is (.+)" text))]
+                       (println "holy shit" token)
+                       (async/put! chan token)))))))
+    chan))
 
 
 ;; But see
@@ -100,17 +103,19 @@
   (-> config clj->js mastodon.))
 
 
-(defn create-new-account [config ac]
-  (println "the config" config)
-  (let [nickname (:Reg ac)
+(defn create-new-account& [username config]
+  (let [chan (async/chan)
         password (.generate genpassword #js {:length 20 :numbers true})]
-    (println "Creating account" nickname "with password" password)
-    (println
-     (-> (make-admin-client config)
-         (.post "api/pleroma/admin/user"
-                #js {:nickname nickname :email (str "jjwiseman+" nickname "@gmail.com") :password password})
-         (.catch (fn [err] (println "ERROR" err)))
-         (.then (fn [res] (println "SUCCESS" res)))))))
+    (println "Creating account" username "with password" password)
+    (-> (make-admin-client config)
+        (.post "api/pleroma/admin/user"
+               #js {:nickname username
+                    :email (str "jjwiseman+" username "@gmail.com")
+                    :password password})
+        (.catch (fn [err] (println "ERROR" err)))
+        (.then (fn [res] (println "SUCCESS" res)
+                 (async/put! chan password))))
+    chan))
 
 ;; Need to create the new account and get an oath token.
 

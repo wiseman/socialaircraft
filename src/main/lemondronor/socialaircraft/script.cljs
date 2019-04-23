@@ -98,7 +98,17 @@
 
 
 (defn main [& args]
-  (social/get-oauth-token "wiseman" "wiseman")
+  (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
+    (go
+
+      (let [admin-access-token (<! (social/get-oauth-token& "wiseman" "wiseman"))
+            pleroma-config (-> config :pleroma (assoc :access_token admin-access-token))]
+        (dotimes [n 10]
+          (let [username (str "TESTUSER00" n)
+                password (<! (social/create-new-account& username (:pleroma config)))
+                oauth-token (<! (social/get-oauth-token& username password))]
+            (println "Created token for user" username ":" oauth-token))))))
+  ;;(social/get-oauth-token "wiseman" "wiseman")
   ;; (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
   ;;   (println "CONFIG" config)
   ;;   (social/create-new-account (:pleroma config) {:Reg "TEST2"}))
