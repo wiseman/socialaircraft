@@ -13,6 +13,7 @@
    [lemondronor.socialaircraft.util :as util]
    ["ansi-diff-stream" :as differ]
    ["fs" :as fs]
+   ["mekanize" :as mechanize]
    ["sqlite3" :as sqlite3]
    ["xhr2" :as xhr2]))
 
@@ -97,17 +98,51 @@
       "config.edn"))
 
 
-(defn main [& args]
-  (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
-    (go
+(def new-mechanize-agent (.-newAgent mechanize))
 
-      (let [admin-access-token (<! (social/get-oauth-token& "wiseman" "wiseman"))
-            pleroma-config (-> config :pleroma (assoc :access_token admin-access-token))]
-        (dotimes [n 10]
-          (let [username (str "TESTUSER00" n)
-                password (<! (social/create-new-account& username (:pleroma config)))
-                oauth-token (<! (social/get-oauth-token& username password))]
-            (println "Created token for user" username ":" oauth-token))))))
+(defn mechanize-test []
+  (let [agent (new-mechanize-agent)]
+    (println agent)
+    (-> agent
+        (.get #js {:uri "http://mastodon.local:3000/auth/sign_in"})
+        (.catch (fn [err]
+                  (println "ERROR" err)))
+        (.then (fn [page]
+                 (println "WOOpage" page)
+                 (let [form (.form page 0)]
+                   (println "WOOform" form)
+                   (println "fields" (.-fields form))
+                   (doseq [field (seq (.-fields form))]
+                     (println "WOOfield" (.-name field) (.-value field)))
+                   (println "WOOfield1" (.field form "user[email]"))
+                   (println "WOOfield1" (.field form "user[password]"))
+                   (.setFieldValue form "user[email]" "admin@mastodon.local")
+                   (.setFieldValue form "user[password]" "mastodonadmin")
+                   (doseq [field (seq (.-fields form))]
+                     (println "WOOfield" (.-name field) (.-value field)))
+                   (println "WOOfield2" (.field form "user[email]"))
+                   (println "WOOfield2" (.field form "user[password]"))
+                   (println "WOOnewform" form)
+                   (.submit form
+                            #js {"requestOptions" {"simple" false
+                                                   "followRedirect" true
+                                                   "followAllRedirects" true}}))))
+        (.then (fn [page]
+                 (println "WOOsecond page" page))))))
+
+
+(defn main [& args]
+  (mechanize-test)
+  ;; (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
+  ;;   (go
+
+  ;;     (let [admin-access-token (<! (social/get-oauth-token& "wiseman" "wiseman"))
+  ;;           pleroma-config (-> config :pleroma (assoc :access_token admin-access-token))]
+  ;;       (dotimes [n 10]
+  ;;         (let [username (str "TESTUSER00" n)
+  ;;               password (<! (social/create-new-account& username (:pleroma config)))
+  ;;               oauth-token (<! (social/get-oauth-token& username password))]
+  ;;           (println "Created token for user" username ":" oauth-token))))))
   ;;(social/get-oauth-token "wiseman" "wiseman")
   ;; (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
   ;;   (println "CONFIG" config)
