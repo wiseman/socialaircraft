@@ -1,38 +1,45 @@
 (ns lemondronor.socialaircraft.db
-  (:require
-   [camel-snake-kebab.core :as csk]
-   [cljs.core.async :as async]
-   [clojure.string :as string]
-   [com.stuartsierra.component :as component]
-   [goog.object :as gobject]
-   [lemondronor.socialaircraft.util :as util]
-   ["fs" :as fs]
-   ["sqlite3" :as sqlite3]))
-
+  (:require [cljs.core.async :as async]
+            [clojure.string :as string]
+            [camel-snake-kebab.core :as csk]
+            [goog.object :as gobject]
+            [lemondronor.socialaircraft.util :as util]
+            ["fs" :as fs]
+            ["sqlite3" :as sqlite3]))
 
 (def ^:private setup-sql "
   CREATE TABLE aircraft (
     icao TEXT NOT NULL PRIMARY KEY,
-    last_post_time TEXT
+    last_post_time TEXT,
+    social_access_token TEXT
   );
-  CREATE TABLE authentication (
-    username TEXT NOT NULL PRIMARY KEY,
-    password TEXT,
-    access_token TEXT
   ")
 
-(defn ^:private init-db [db-conn]
+
+(defn init-db [db-conn]
   (println "Initializing database...")
   (.serialize
    db-conn
    (fn []
      (.run db-conn "DROP TABLE IF EXISTS aircraft")
-     (.run db-conn "DROP TABLE IF EXISTS authentication")
      (.run db-conn
            setup-sql
            (fn []
              (println "Database initialized.")
              (.close db-conn))))))
+
+
+(def ^:private db-path "socialaircraft.db")
+
+;; Create and initialize database if it doesn't exist.
+(when (not (fs/existsSync db-path))
+  (let [db-conn (sqlite3/Database. db-path)]
+    (.serialize
+     db-conn
+     #(init-db db-conn)
+     #(.close db-conn))))
+
+(def ^:private db-conn (sqlite3/Database. db-path))
 
 
 ;; Turns this:
@@ -65,13 +72,12 @@
 
   Given a collection of ICAOs, returns a channel that will be sent the
   collection of corresponding records."
-  [database icaos]
+  [icaos]
   (println "Looking for" (count icaos) "aircraft in database")
-  (let [{:keys [conn]} database
-        sql (str "SELECT * from aircraft where icao in "
+  (let [sql (str "SELECT * from aircraft where icao in "
                  (in-operator-helper icaos))
         chan (async/chan)]
-    (apply (.bind (.-all conn) conn)
+    (apply (.bind (.-all db-conn) db-conn)
            sql
            (concat icaos
                    (list
@@ -85,52 +91,23 @@
 
 (defn record-post
   "Records the fact that we made a post in the DB."
-  [database icao]
-
-  (let [{:keys [conn]} database]
-    (.run
-     conn
-     (str "INSERT INTO aircraft (icao, last_post_time) "
-          "VALUES (?, ?) "
-          "ON CONFLICT (icao) "
-          "DO UPDATE SET last_post_time = excluded.last_post_time")
-     icao
-     (.toISOString (js/Date.)))))
+  [icao]
+  (.run
+   db-conn
+   (str "INSERT INTO aircraft (icao, last_post_time) "
+        "VALUES (?, ?) "
+        "ON CONFLICT (icao) "
+        "DO UPDATE SET last_post_time = excluded.last_post_time")
+   icao
+   (.toISOString (js/Date.))))
 
 
-(defn record-social-access-token [database icao token]
-  (let [{:keys [conn]} database]
-    (.run
-     conn
-     (str "INSERT INTO aircraft (icao, social_access_token) "
-          "VALUES (?, ?) "
-          "ON CONFLICT (icao) "
-          "DO UPDATE SET social_access_token = excluded.social_access_token")
-     icao
-     token)))
-
-
-(defrecord Database [db-path
-                     conn]
-  component/Lifecycle
-  (start [this]
-    (if conn
-      this
-      (do
-        ;; Create and initialize database if it doesn't exist.
-        (when (not (fs/existsSync db-path))
-          (let [db-conn (sqlite3/Database. db-path)]
-            (.serialize
-             db-conn
-             #(init-db db-conn)
-             #(.close db-conn))))
-        (assoc this :conn (sqlite3/Database. db-path)))))
-  (stop [this]
-    (if conn
-      (do (.close conn)
-          (assoc this :conn nil)))))
-
-
-(defn new-database [config]
-  (let [db-path (get-in config [:database :path] "socialaircraft.db")]
-    (map->Database {:db-path db-path})))
+(defn record-social-access-token [icao token]
+  (.run
+   db-conn
+   (str "INSERT INTO aircraft (icao, social_access_token) "
+        "VALUES (?, ?) "
+        "ON CONFLICT (icao) "
+        "DO UPDATE SET social_access_token = excluded.social_access_token")
+   icao
+   token))

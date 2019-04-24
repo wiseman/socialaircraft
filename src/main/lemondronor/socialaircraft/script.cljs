@@ -5,7 +5,6 @@
    [cljs.core.async :refer [<!]]
    [cljs.reader :as edn]
    [clojure.string :as string]
-   [com.stuartsierra.component :as component]
    [goog.string :as gstring]
    [goog.string.format]
    [lemondronor.socialaircraft.db :as db]
@@ -36,62 +35,60 @@
       (str "<" icao ">"))))
 
 
-(comment
-  (defn get-flying-aircraft& []
-   (println "Fetching aircraft from" data-url)
-   (go
-     (let [response (<! (http/get data-url))
-           all-aircraft (-> response :body :acList)]
-       (println "Fetched" (count all-aircraft) "aircraft from server.")
-       (util/index-by :Icao all-aircraft))))>
+(defn get-flying-aircraft& []
+  (println "Fetching aircraft from" data-url)
+  (go
+    (let [response (<! (http/get data-url))
+          all-aircraft (-> response :body :acList)]
+      (println "Fetched" (count all-aircraft) "aircraft from server.")
+      (util/index-by :Icao all-aircraft))))>
 
 
- (defn build-post
-   "Creates an activity post data structure for an aircraft."
-   [ac hist]
-   ;; FIXME: dummy.
-   {:type :post :icao (:Icao ac) :data ac :text (posts/weighted-rand-post ac)})
+(defn build-post
+  "Creates an activity post data structure for an aircraft."
+  [ac hist]
+  ;; FIXME: dummy.
+  {:type :post :icao (:Icao ac) :data ac :text (posts/weighted-rand-post ac)})
 
 
- (defn make-post
-   "Submits a post."
-   [post]
-   ;; FIXME: dummy.
-   (println (gstring/format "Posting about %s: %s" (:icao post) (:text post)))
-   (db/record-post (:icao post)))
+(defn make-post
+  "Submits a post."
+  [post]
+  ;; FIXME: dummy.
+  (println (gstring/format "Posting about %s: %s" (:icao post) (:text post)))
+  (db/record-post (:icao post)))
 
 
- (def posting-interval-ms (* 60 1000))
+(def posting-interval-ms (* 60 1000))
 
 
- (defn annotate-ac-for-post [ac]
-   (cond-> ac
-     (= (:Reg ac) (:Call ac)) (dissoc :Call)))
+(defn annotate-ac-for-post [ac]
+  (cond-> ac
+    (= (:Reg ac) (:Call ac)) (dissoc :Call)))
 
 
- (defn process-current-aircraft [ac db]
-   ;;o(println "Processing" (ac-short-desc ac))
-   (let [last-post-time (:last-post-time db)]
-     (when (or (nil? last-post-time)
-               (> (- (js/Date.) last-post-time) posting-interval-ms))
-       (let [post (build-post (annotate-ac-for-post ac) db)]
-         (make-post post)))))
+(defn process-current-aircraft [ac db]
+  ;;o(println "Processing" (ac-short-desc ac))
+  (let [last-post-time (:last-post-time db)]
+    (when (or (nil? last-post-time)
+              (> (- (js/Date.) last-post-time) posting-interval-ms))
+      (let [post (build-post (annotate-ac-for-post ac) db)]
+        (make-post post)))))
 
- (defn process-flying-aircraft [flying db]
-   (doseq [[icao ac] flying]
-     (process-current-aircraft ac (db icao))))
+(defn process-flying-aircraft [flying db]
+  (doseq [[icao ac] flying]
+    (process-current-aircraft ac (db icao))))
 
- (defn process-stale-aircraft [flying])
+(defn process-stale-aircraft [flying])
 
- (defn run []
-   (println "Processing aircraft")
-   (go))
- )
-
-(defn new-system [config]
-  (component/system-map
-   :database (db/new-database config)
-   :mastodon (social/new-mastodon config)))
+(defn run []
+  (println "Processing aircraft")
+  (go
+    (let [flying-ac (<! (get-flying-aircraft&))
+          flying-ac-db (<! (db/get-aircraft& (keys flying-ac)))]
+      (process-flying-aircraft flying-ac flying-ac-db)
+      (process-stale-aircraft flying-ac)))
+  (js/setTimeout run 5000))
 
 
 (defn config-path []
@@ -99,18 +96,18 @@
       (-> js/process .-env .-MASTODON_BOT_CONFIG)
       "config.edn"))
 
+
 (defn main [& args]
   (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
-    (component/start (new-system config)))
-  ;; (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
-  ;;   (go
-  ;;     (let [admin-access-token (<! (social/get-oauth-token& "wiseman" "wiseman"))
-  ;;           pleroma-config (-> config :pleroma (assoc :access_token admin-access-token))]
-  ;;       (dotimes [n 10]
-  ;;         (let [username (str "TESTUSER00" n)
-  ;;               password (<! (social/create-new-account& username (:pleroma config)))
-  ;;               oauth-token (<! (social/get-oauth-token& username password))]
-  ;;           (println "Created token for user" username ":" oauth-token))))))
+    (go
+
+      (let [admin-access-token (<! (social/get-oauth-token& "wiseman" "wiseman"))
+            pleroma-config (-> config :pleroma (assoc :access_token admin-access-token))]
+        (dotimes [n 10]
+          (let [username (str "TESTUSER00" n)
+                password (<! (social/create-new-account& username (:pleroma config)))
+                oauth-token (<! (social/get-oauth-token& username password))]
+            (println "Created token for user" username ":" oauth-token))))))
   ;;(social/get-oauth-token "wiseman" "wiseman")
   ;; (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
   ;;   (println "CONFIG" config)

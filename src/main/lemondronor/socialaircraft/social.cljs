@@ -1,7 +1,6 @@
 (ns lemondronor.socialaircraft.social
   (:require
    [cljs.core.async :as async]
-   [com.stuartsierra.component :as component]
    [lemondronor.socialaircraft.db :as db]
    ["generate-password" :as genpassword]
    ["mastodon-api" :as mastodon]
@@ -125,7 +124,7 @@
 
 (defn get-and-save-social-access-token [ac config]
   (let [token (get-social-access-token ac config)]
-    ;;(db/record-social-access-token (:Icao ac) token)
+    (db/record-social-access-token (:Icao ac) token)
     token))
 
 
@@ -137,30 +136,3 @@
   ;;   (println "Posting" post "with" social-access-token)
   ;;   )
   )
-
-
-(defrecord Mastodon [host admin-username admin-password app-name headless?
-                     database
-                     browser]
-  component/Lifecycle
-  (start [this]
-    (if (and browser @browser)
-      this
-      (do
-        (-> (.launch puppeteer #js {:headless headless?})
-            (.catch (fn [err] (println "ERROR in puppeteer:" err)))
-            (.then (fn [b]
-                     (reset! browser b))))
-        this))
-    this))
-
-(defn new-mastodon [config]
-  (let [mastodon-config (:mastodon config)]
-    (component/using
-     (map->Mastodon {:host (:host mastodon-config)
-                     :admin-username (:admin-username mastodon-config)
-                     :admin-password (:admin-password mastodon-config)
-                     :app-name (get mastodon-config :app-name "socialaircraft")
-                     :headless? (get mastodon-config :headless? false)
-                     :browser (atom nil)})
-     {:database :database})))
