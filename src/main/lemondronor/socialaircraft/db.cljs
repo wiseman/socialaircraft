@@ -1,11 +1,16 @@
 (ns lemondronor.socialaircraft.db
-  (:require [cljs.core.async :as async]
-            [clojure.string :as string]
-            [camel-snake-kebab.core :as csk]
-            [goog.object :as gobject]
-            [lemondronor.socialaircraft.util :as util]
-            ["fs" :as fs]
-            ["sqlite3" :as sqlite3]))
+  (:require
+   [camel-snake-kebab.core :as csk]
+   [cljs.core.async :as async]
+   [clojure.string :as string]
+   [goog.object :as gobject]
+   [lemondronor.socialaircraft.util :as util]
+   ["fs" :as fs]
+   ["sqlite3" :as sqlite3])
+  (:require-macros [lemondronor.socialaircraft.logging :as logging]))
+
+(logging/deflog "db" logger)
+
 
 (def ^:private setup-sql "
   CREATE TABLE aircraft (
@@ -17,7 +22,7 @@
 
 
 (defn init-db [db-conn]
-  (println "Initializing database...")
+  (info "Initializing database...")
   (.serialize
    db-conn
    (fn []
@@ -25,7 +30,7 @@
      (.run db-conn
            setup-sql
            (fn []
-             (println "Database initialized.")
+             (info "Database initialized.")
              (.close db-conn))))))
 
 
@@ -73,7 +78,7 @@
   Given a collection of ICAOs, returns a channel that will be sent the
   collection of corresponding records."
   [icaos]
-  (println "Looking for" (count icaos) "aircraft in database")
+  (info "Looking for %s aircraft in database" (count icaos))
   (let [sql (str "SELECT * from aircraft where icao in "
                  (in-operator-helper icaos))
         chan (async/chan)]
@@ -83,8 +88,8 @@
                    (list
                     (fn [err rows]
                       (when err
-                        (println "Error in get-aircraft&:" err))
-                      (println "Loaded" (count rows) "aircraft from database")
+                        (error "Error in get-aircraft&: %s" err))
+                      (info "Loaded %s aircraft from database" (count rows))
                       (async/put! chan (util/index-by :icao (map parse-record rows)))))))
     chan))
 

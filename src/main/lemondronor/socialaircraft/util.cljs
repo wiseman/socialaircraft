@@ -1,4 +1,35 @@
-(ns lemondronor.socialaircraft.util)
+(ns lemondronor.socialaircraft.util
+  (:require
+   [goog.string :as gstring]
+   [goog.string.format]
+   ["winston" :as winston]))
+
+(let [createLogger (.-createLogger winston)
+      format (.-format winston)
+      transports (.-transports winston)
+      printf-fmt #(gstring/format "%s %-6s/%-18s| %s"
+                                  (.-timestamp %)
+                                  (.-service %)
+                                  (.-level %)
+                                  (.-message %))]
+  (def logger (createLogger
+               #js {:level "debug"
+                    :format (.combine format
+                                      (.colorize format #js {:all true})
+                                      (.timestamp format #js {:format "YYYY-MM-DD HH:mm:ss"})
+                                      (.errors format #js {:stack true})
+                                      (.splat format)
+                                      (.timestamp format)
+                                      (.label format)
+                                      (.ms format)
+                                      (.json format))
+                    :defaultMeta #js {}}))
+  (.add logger (new (.-Console transports) #js {:format (.combine format
+                                                                  (.printf format printf-fmt))})))
+
+
+(defn get-logger [service]
+  (.child logger #js {:service service}))
 
 
 (defn index-by

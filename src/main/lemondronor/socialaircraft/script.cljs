@@ -14,7 +14,12 @@
    ["ansi-diff-stream" :as differ]
    ["fs" :as fs]
    ["sqlite3" :as sqlite3]
-   ["xhr2" :as xhr2]))
+   ["winston" :as winston]
+   ["xhr2" :as xhr2])
+  (:require-macros [lemondronor.socialaircraft.logging :as logging]))
+
+(logging/deflog "script" logger)
+
 
 ;; See https://github.com/r0man/cljs-http/issues/94#issuecomment-426442569
 (set! js/XMLHttpRequest xhr2)
@@ -36,11 +41,11 @@
 
 
 (defn get-flying-aircraft& []
-  (println "Fetching aircraft from" data-url)
+  (info "Fetching aircraft from %s" data-url)
   (go
     (let [response (<! (http/get data-url))
           all-aircraft (-> response :body :acList)]
-      (println "Fetched" (count all-aircraft) "aircraft from server.")
+      (info "Fetched %s aircraft from server" (count all-aircraft))
       (util/index-by :Icao all-aircraft))))>
 
 
@@ -55,7 +60,7 @@
   "Submits a post."
   [post]
   ;; FIXME: dummy.
-  (println (gstring/format "Posting about %s: %s" (:icao post) (:text post)))
+  (info "Posting about %s: %s" (:icao post) (:text post))
   (db/record-post (:icao post)))
 
 
@@ -82,7 +87,7 @@
 (defn process-stale-aircraft [flying])
 
 (defn run []
-  (println "Processing aircraft")
+  (info "Processing aircraft")
   (go
     (let [flying-ac (<! (get-flying-aircraft&))
           flying-ac-db (<! (db/get-aircraft& (keys flying-ac)))]
@@ -98,8 +103,10 @@
 
 
 (defn main [& args]
-  (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
-    (social/create-account& config "blowme8" "jjwiseman+blowme8@gmail.com"))
+  (go
+    (<! (get-flying-aircraft&)))
+  ;; (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
+  ;;   (social/create-account& config "blowme8" "jjwiseman+blowme8@gmail.com"))
   ;;(social/browser-test)
   ;; (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
   ;;   (go

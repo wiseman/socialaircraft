@@ -3,11 +3,15 @@
    [cljs-http.client :as http]
    [cljs.core.async :refer [chan <! put! go]]
    [lemondronor.socialaircraft.db :as db]
+   [lemondronor.socialaircraft.util :as util]
    ["generate-password" :as genpassword]
    ["mastodon-api" :as mastodon]
    ["oauth" :as oauth]
    ["puppeteer" :as puppeteer]
-   ["readline" :as readline]))
+   ["readline" :as readline])
+  (:require-macros [lemondronor.socialaircraft.logging :as logging]))
+
+(logging/deflog "social" logger)
 
 (def oauth2 (.-OAuth2 oauth))
 
@@ -28,9 +32,9 @@
     (-> mastodon
         ;; Get client ID and client secret.
         (.createOAuthApp (str base-url "api/v1/apps") app-name permissions)
-        (.catch (fn [err] (println "createOAuthApp error:" err)))
+        (.catch (fn [err] (error "createOAuthApp error: %s" err)))
         (.then (fn [response]
-                 (println "Got createOAuthApp response" response)
+                 (info "Got createOAuthApp response %s" response)
                  ;; Get authorization URL.
                  (let [res (js->clj response :keywordize-keys true)
                        client-id (:client_id res)
@@ -38,11 +42,11 @@
                        redirect-uri (:redirect_uri res)
                        oauth (oauth2. client-id client-secret
                                       base-url nil "/oauth/token")]
-                   (println "client_id:" client-id "client_secret" client-secret)
+                   (info "client_id: %s client_secret: %s" client-id client-secret)
                    (let [url (.getAuthorizeUrl oauth #js {"redirect_uri" oauth-redirect-uri
                                                           "response_type" "code"
                                                           "scope" permissions})]
-                     (println "Authorization URL:" url)
+                     (info "Authorization URL: %s" url)
                      (put! ch {:oauth oauth :url url}))))))
     ch))
 
@@ -52,7 +56,7 @@
 (defn get-browser& []
   (let [ch (chan)]
     (-> (.launch puppeteer #js {:headless false})
-        (.catch (fn [err] (println "PUPPETEER ERROR:" err)))
+        (.catch (fn [err] (error "puppeteer error: %s" err)))
         (.then (fn [browser]
                  (reset! browser_ browser)
                  (put! ch browser))))
@@ -60,16 +64,16 @@
 
 
 (defn browser-test []
-  (println "WOO1")
+  (info "WOO1")
   (go
-    (println "WOO2")
+    (info "WOO2")
     (let [b1 (<! (get-browser&))
           b2 (<! (get-browser&))]
       (println b1)
       (println b2))))
 
 (defn get-oauth-token& [user password]
-  (println "Getting oauth token for user" user)
+  (info "Getting oauth token for user %s" user)
   (let [ch (chan)]
     (go
       (let [{:keys [oauth url]} (<! (get-app-authorization&))
@@ -77,7 +81,7 @@
             browser (<! (get-browser&))]
         (-> (.newPage browser)
             (.catch (fn [err]
-                      (println "puppeteer error:" err)))
+                      (error "puppeteer error: %s" err)))
             (.then (fn [page]
                      (reset! page_ page)
                      (.goto page url)))
@@ -91,15 +95,15 @@
             (.then (fn [[res]]
                      (if (.ok res)
                        (do
-                         (println "SUCCESS")
+                         (info "SUCCESS")
                          (.$ @page_ "h2"))
-                       (println "OOPS" (.statusText res) (.text res)))))
+                       (error "OOPS %s %s" (.statusText res) (.text res)))))
             (.then (fn [el]
                      (.$eval @page_ "h2" (fn [el] (.-innerText el)))))
             (.then (fn [text]
                      (.close @page_)
                      (let [token (second (re-find #"Token code is (.+)" text))]
-                       (println "holy shit" token)
+                       (info "holy shit %s" token)
                        (put! ch token)))))))
     ch))
 
@@ -114,14 +118,14 @@
 (defn pleroma-create-new-account& [username config]
   (let [ch (chan)
         password (.generate genpassword #js {:length 20 :numbers true})]
-    (println "Creating account" username "with password" password)
+    (info "Creating account %s with password %s" username password)
     (-> (make-admin-client config)
         (.post "api/pleroma/admin/user"
                #js {:nickname username
                     :email (str "jjwiseman+" username "@gmail.com")
                     :password password})
-        (.catch (fn [err] (println "ERROR" err)))
-        (.then (fn [res] (println "SUCCESS" res)
+        (.catch (fn [err] (error "ERROR %s" err)))
+        (.then (fn [res] (info "SUCCESS %s" res)
                  (put! ch password))))
     ch))
 
@@ -146,8 +150,10 @@
   )
 
 
+;; Creates an account and returns the password.
+
 (defn create-account& [config username email]
-  (println "Creating new user" username email)
+  (info "Creating new user %s %s" username email)
   (let [ch (chan)]
     (go
       (let [url (get-in config [:mastodon :tootctl-url])
@@ -156,8 +162,7 @@
                                           "create"
                                           username
                                           "--email" email
-                                          "--confirmed"
-                                          ]
+                                          "--confirmed"]
                                          }))]
         (if (= (:status response) 200)
           (let [password-match (re-find #"(?m)^New password: (.+)$" (get-in response [:body :stdout]))]
