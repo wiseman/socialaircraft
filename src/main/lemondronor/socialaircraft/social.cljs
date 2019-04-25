@@ -1,6 +1,7 @@
 (ns lemondronor.socialaircraft.social
   (:require
-   [cljs.core.async :as async]
+   [cljs-http.client :as http]
+   [cljs.core.async :refer [chan <! put! go]]
    [lemondronor.socialaircraft.db :as db]
    ["generate-password" :as genpassword]
    ["mastodon-api" :as mastodon]
@@ -23,7 +24,7 @@
 
 
 (defn get-app-authorization& []
-  (let [chan (async/chan)]
+  (let [ch (chan)]
     (-> mastodon
         ;; Get client ID and client secret.
         (.createOAuthApp (str base-url "api/v1/apps") app-name permissions)
@@ -42,31 +43,38 @@
                                                           "response_type" "code"
                                                           "scope" permissions})]
                      (println "Authorization URL:" url)
-                     (async/put! chan {:oauth oauth :url url}))))))
-    chan))
+                     (put! ch {:oauth oauth :url url}))))))
+    ch))
 
 
 (def browser_ (atom nil))
 
 (defn get-browser& []
-  (let [chan (async/chan)]
-    (if @browser_
-      (async/put! chan @browser_)
-      (-> (.launch puppeteer #js {:headless true})
-          (.catch (fn [err] (println "PUPPETEER ERROR:" err)))
-          (.then (fn [browser]
-                   (reset! browser_ browser)
-                   (async/put! chan browser)))))
-    chan))
+  (let [ch (chan)]
+    (-> (.launch puppeteer #js {:headless false})
+        (.catch (fn [err] (println "PUPPETEER ERROR:" err)))
+        (.then (fn [browser]
+                 (reset! browser_ browser)
+                 (put! ch browser))))
+    ch))
 
+
+(defn browser-test []
+  (println "WOO1")
+  (go
+    (println "WOO2")
+    (let [b1 (<! (get-browser&))
+          b2 (<! (get-browser&))]
+      (println b1)
+      (println b2))))
 
 (defn get-oauth-token& [user password]
   (println "Getting oauth token for user" user)
-  (let [chan (async/chan)]
-    (async/go
-      (let [{:keys [oauth url]} (async/<! (get-app-authorization&))
+  (let [ch (chan)]
+    (go
+      (let [{:keys [oauth url]} (<! (get-app-authorization&))
             page_ (atom nil)
-            browser (async/<! (get-browser&))]
+            browser (<! (get-browser&))]
         (-> (.newPage browser)
             (.catch (fn [err]
                       (println "puppeteer error:" err)))
@@ -92,8 +100,8 @@
                      (.close @page_)
                      (let [token (second (re-find #"Token code is (.+)" text))]
                        (println "holy shit" token)
-                       (async/put! chan token)))))))
-    chan))
+                       (put! ch token)))))))
+    ch))
 
 
 ;; But see
@@ -103,8 +111,8 @@
   (-> config clj->js mastodon.))
 
 
-(defn create-new-account& [username config]
-  (let [chan (async/chan)
+(defn pleroma-create-new-account& [username config]
+  (let [ch (chan)
         password (.generate genpassword #js {:length 20 :numbers true})]
     (println "Creating account" username "with password" password)
     (-> (make-admin-client config)
@@ -114,8 +122,8 @@
                     :password password})
         (.catch (fn [err] (println "ERROR" err)))
         (.then (fn [res] (println "SUCCESS" res)
-                 (async/put! chan password))))
-    chan))
+                 (put! ch password))))
+    ch))
 
 ;; Need to create the new account and get an oath token.
 
@@ -136,3 +144,25 @@
   ;;   (println "Posting" post "with" social-access-token)
   ;;   )
   )
+
+
+(defn create-account& [config username email]
+  (println "Creating new user" username email)
+  (let [ch (chan)]
+    (go
+      (let [url (get-in config [:mastodon :tootctl-url])
+            response (<! (http/post url {:json-params
+                                         ["accounts"
+                                          "create"
+                                          username
+                                          "--email" email
+                                          "--confirmed"
+                                          ]
+                                         }))]
+        (if (= (:status response) 200)
+          (let [password-match (re-find #"(?m)^New password: (.+)$" (get-in response [:body :stdout]))]
+            (if password-match
+              (put! ch password-match)
+              (throw (js/Error. "Could not parse password from response:" response))))
+          (throw (js/Error. (str "Bad response from tootctl API:" response))))))
+    ch))
