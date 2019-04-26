@@ -2,11 +2,12 @@
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require
    [cljs-http.client :as http]
-   [cljs.core.async :refer [<!]]
+   [cljs.core.async :refer [<! alts!]]
    [cljs.reader :as edn]
    [clojure.string :as string]
    [goog.string :as gstring]
    [goog.string.format]
+   [lemondronor.socialaircraft.acinfo :as acinfo]
    [lemondronor.socialaircraft.db :as db]
    [lemondronor.socialaircraft.posts :as posts]
    [lemondronor.socialaircraft.social :as social]
@@ -104,7 +105,30 @@
 
 (defn main [& args]
   (go
-    (<! (get-flying-aircraft&)))
+    (let [reg "N12"
+          config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)
+          password (:password (<! (social/create-account&
+                                   config reg
+                                   (str "jjwiseman+" reg "@gmail.com"))))
+          page (:page (<! (social/browser-for-mastodon-user&
+                           config
+                           (str "jjwiseman+" reg "@gmail.com")
+                           password)))]
+      (social/set-current-profile&
+       config
+       page
+       {:bio "I am a nice bot."
+        :bot? true
+        :display-name reg
+        :discoverable? true
+        :avatar "/Users/wiseman/Desktop/n404kr.jpeg"
+        :header "/Users/wiseman/Desktop/n404kr-banner.jpg"})
+
+      ;;(social/create-account& config "N662PD" "jjwiseman+N662PD@gmail.com")
+      ;; (go
+      ;;   (let [url (<! (acinfo/get-profile-photo-airport-data& nil "N662PD"))]
+      ;;     (info "GOT URL %s" url)))
+      ))
   ;; (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
   ;;   (social/create-account& config "blowme8" "jjwiseman+blowme8@gmail.com"))
   ;;(social/browser-test)

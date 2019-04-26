@@ -1,8 +1,9 @@
 (ns lemondronor.socialaircraft.social
   (:require
    [cljs-http.client :as http]
-   [cljs.core.async :refer [chan <! put! go]]
+   [cljs.core.async :refer [chan <! put! go close!]]
    [lemondronor.socialaircraft.db :as db]
+   [lemondronor.socialaircraft.generation :as generation]
    [lemondronor.socialaircraft.util :as util]
    ["generate-password" :as genpassword]
    ["mastodon-api" :as mastodon]
@@ -167,7 +168,105 @@
         (if (= (:status response) 200)
           (let [password-match (re-find #"(?m)^New password: (.+)$" (get-in response [:body :stdout]))]
             (if password-match
-              (put! ch password-match)
+              (let [password (second password-match)]
+                (info "Created user %s with password %s" username password)
+                (put! ch {:username username :email :email :password password}))
               (throw (js/Error. "Could not parse password from response:" response))))
           (throw (js/Error. (str "Bad response from tootctl API:" response))))))
+    ch))
+
+
+
+(defn get-profile-photo-other& [icao reg]
+  (let [ch (chan)]
+    (go
+      (put! ch :kaboom))))
+
+
+(def bio-templates
+  (map generation/parse-template
+       ["I am {Reg}, a {Mdl} operated by {Op} in {Cou}."
+        "I am {Reg}, a {Mdl} operated by {Op}."
+        "I am {Reg}, a {Mdl} in {Cou}"
+        "I am {Reg}, in {Cou}"
+        "I am {Reg}, a {Mdl}."
+        "I am {Reg}."]))
+
+
+(defn bio-text [vrs-record]
+  (generation/generate bio-templates vrs-record))
+
+
+(defn browser-for-mastodon-user& [config email password]
+  (info "Getting browser for user %s with password %s" email password)
+  (let [ch (chan)
+        page_ (atom nil)]
+    (go
+      (-> (.launch puppeteer #js {:headless false})
+          (.catch (fn [err] (error "puppeteer error: %s" err)))
+          (.then (fn [browser]
+                   (debug "Got browser")
+                   (.newPage browser)))
+          (.then (fn [page]
+                   (reset! page_ page)
+                   (let [url (js/URL. "/auth/sign_in" (get-in config [:mastodon :base-url]))]
+                     (info "navigating to %s" url)
+                     (.goto page url))))
+          (.then (fn [_]
+                   (.all js/Promise
+                         [(.waitForNavigation @page_)
+                          (.$eval @page_ "#user_email" (fn [el email] (set! (.-value el) email)) email)
+                          (.$eval @page_ "#user_password" (fn [el password] (set! (.-value el) password)) password)
+                          (.$eval @page_ "#new_user" (fn [form] (.submit form)))])))
+          (.then (fn [_]
+                   (put! ch {:email email :page @page_})))))
+    ch))
+
+
+(defn upload-file [page selector file-path]
+  (let [rel-path (util/relative-path file-path)]
+    (-> (.$ page selector)
+        (.then (fn [el]
+                 (.uploadFile el rel-path))))))
+
+(defn set-current-profile& [config page profile]
+  (let [ch (chan)]
+    (go
+      (let [url (js/URL. "/settings/profile" (get-in config [:mastodon :base-url]))]
+        (info "Navigating to %s" url)
+        (-> (.goto page url)
+            (.catch (fn [err] (error "puppeteer error: %s" err)))
+            (.then (fn [_]
+                     (.all js/Promise
+                           (conj
+                            (cond-> [(.waitForNavigation page)]
+                              (:display-name profile)
+                              (conj
+                               (.$eval page "#account_display_name"
+                                       (fn [el text] (set! (.-value el) text)) (:display-name profile)))
+                              (:bio profile)
+                              (conj
+                               (.$eval page "#account_note"
+                                       (fn [el text] (set! (.-value el) text)) (:bio profile)))
+                              (contains? profile :bot?)
+                              (conj
+                               (.$eval page "#account_bot"
+                                       (fn [el checked?] (set! (.-checked el) checked?)) (:bot? profile)))
+                              (contains? profile :locked?)
+                              (conj
+                               (.$eval page "#account_locked"
+                                       (fn [el checked?] (set! (.-checked el) checked?)) (:locked? profile)))
+                              (contains? profile :discoverable?)
+                              (conj
+                               (.$eval page "#account_discoverable"
+                                       (fn [el checked?] (set! (.-checked el) checked?)) (:discoverable? profile)))
+                              (:avatar profile)
+                              (conj
+                               (upload-file page "#account_avatar" (:avatar profile)))
+                              (:header profile)
+                              (conj
+                               (upload-file page "#account_header" (:header profile))))
+                            (.$eval page "form" (fn [form] (.submit form)))))))
+            (.then (fn [_]
+                     (put! ch true))))))
     ch))

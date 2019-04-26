@@ -21,20 +21,9 @@
 (def parsed-templates (map generation/parse-template templates))
 
 
-(defn generate-all [data template]
-  (let [scored-fragments (generation/score-fragments
-                          (generation/generate-fragments
-                           template
-                           data))]
-    (map (fn [[score frag]]
-           {:score score :text (string/trim (:text frag))})
-         scored-fragments)))
-
 (defn weighted-rand-post [data]
-  (let [scored-templates (apply concat (map #(generate-all data %) parsed-templates))]
-    (:text (util/weighted-rand-nth scored-templates :score))))
+  (let [expansions (generation/generate-all parsed-templates data)]
+    (:text (util/weighted-rand-nth expansions :score))))
 
 (defn best-post [data]
-  (let [scored-templates (apply concat (map #(generate-all data %) parsed-templates))
-        winning-template (first scored-templates)]
-    (:text winning-template)))
+  (:text (generation/generate parsed-templates data)))

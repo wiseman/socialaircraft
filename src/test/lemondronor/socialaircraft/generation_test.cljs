@@ -2,7 +2,7 @@
   (:require [cljs.test :refer (deftest is)]
             [lemondronor.socialaircraft.generation :as generation]))
 
-(deftest parser
+(deftest parse-template
   (is (= [:optional [:varref "woo"]]
          (generation/parse-template "?:{woo}")))
   (is (= [:sequence [:text "Hello "] [:varref "foo"] [:text "!"]]
@@ -22,21 +22,25 @@
           [:choice [:text "What up?"] [:text "Seeya"]]]
          (generation/parse-template "Hi {name}, ?:[{woo} ][What up?|Seeya]"))))
 
-(deftest text-test
-  (is (= "Hello!"
+(deftest generate
+  (is (= ["Hello!"]
+         (generation/generate-all
+          [(generation/parse-template "Hello!")]
+          {})))
+    (is (= "Hello!"
          (generation/generate
-          (generation/parse-template "Hello!")
+          [(generation/parse-template "Hello!")]
           {}))))
 
 (deftest generate-test
   (is (= [{:varrefs [], :text ""} {:varrefs [], :text "woo"}]
-         (generation/generate-fragments
+         (generation/expand
           (generation/parse-template "?:woo"))))
   (is (= [{:varrefs [], :text ""} {:varrefs [], :text "woo bar"}]
-         (generation/generate-fragments
+         (generation/expand
           (generation/parse-template "?:[woo bar]"))))
   (is (= [{:varrefs [], :text ""} {:varrefs [:woo], :text "WOO"}]
-         (generation/generate-fragments
+         (generation/expand
           (generation/parse-template "?:{woo}")
           {:woo "WOO"})))
   (is (= ["Hi Tim, What up?"
@@ -44,6 +48,6 @@
           "Hi Tim, WOO! What up?"
           "Hi Tim, WOO! Seeya"]
          (map :text
-              (generation/generate-fragments
+              (generation/expand
                (generation/parse-template "Hi {name}, ?:[{woo} ][What up?|Seeya]")
                {:name "Tim" :woo "WOO!"})))))

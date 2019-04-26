@@ -2,13 +2,15 @@
   (:require
    [goog.string :as gstring]
    [goog.string.format]
+   ["path" :as path]
    ["winston" :as winston]))
 
 (let [createLogger (.-createLogger winston)
       format (.-format winston)
       transports (.-transports winston)
-      printf-fmt #(gstring/format "%s %-6s/%-18s| %s"
+      printf-fmt #(gstring/format "%s%-7s %-6s/%-18s| %s"
                                   (.-timestamp %)
+                                  (.-ms %)
                                   (.-service %)
                                   (.-level %)
                                   (.-message %))]
@@ -16,7 +18,7 @@
                #js {:level "debug"
                     :format (.combine format
                                       (.colorize format #js {:all true})
-                                      (.timestamp format #js {:format "YYYY-MM-DD HH:mm:ss"})
+                                      (.timestamp format #js {:format "YYYYMMDD HHmmss"})
                                       (.errors format #js {:stack true})
                                       (.splat format)
                                       (.timestamp format)
@@ -98,3 +100,10 @@
 ;;                        [(Math/abs (- bearing (nth % 1))) (first cd)])
 ;;                      cardinal-directions)]
 ;;     (first (first (sort-by first errors)))))
+
+
+(defn relative-path
+  ([path]
+   (relative-path (.cwd js/process) path))
+  ([from to]
+   (path/relative from to)))

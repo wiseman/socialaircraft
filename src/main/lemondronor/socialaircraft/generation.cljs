@@ -43,50 +43,58 @@
       (into [:sequence] xformed-result))))
 
 
-(defmulti generate-fragments (fn [template data] (first template)))
+(defmulti expand (fn [template data] (first template)))
 
-(defmethod generate-fragments :varref [template data]
+(defmethod expand :varref [template data]
   (let [var (keyword (second template))
         val (data var)]
     (if (or (nil? val) (= val ""))
       '()
       (list {:varrefs [var] :text (str (data var))}))))
 
-(defmethod generate-fragments :text [template data]
+(defmethod expand :text [template data]
   (list {:varrefs [] :text (second template)}))
 
-(defmethod generate-fragments :optional [template data]
+(defmethod expand :optional [template data]
   (concat (list {:varrefs [] :text ""})
-          (generate-fragments (second template) data)))
+          (expand (second template) data)))
 
-(defmethod generate-fragments :choice [template data]
-  (apply concat (map #(generate-fragments % data) (rest template))))
+(defmethod expand :choice [template data]
+  (apply concat (map #(expand % data) (rest template))))
 
-(defmethod generate-fragments :sequence [template data]
+(defmethod expand :sequence [template data]
   (let [merge-expansions1 (fn
                             ([a] a)
                             ([a b] {:varrefs (concat (:varrefs a) (:varrefs b))
                                     :text (str (:text a) (:text b))}))
         merge-expansions (fn [args]
                            (reduce merge-expansions1 args))
-        things (map #(generate-fragments % data) (rest template))
+        things (map #(expand % data) (rest template))
         chains (apply combo/cartesian-product things)]
     (map merge-expansions chains)))
 
 
-;; A simple fragment scorer that gives high scores to fragments that
+;; A simple expansion scorer that gives high scores to expansions that
 ;; used more variables.
 
-(defn score-fragments [fragments]
-  (let [scored-fragments (->> (map (fn [f] [(count (:varrefs f)) f])
-                                   fragments)
-                              (sort-by first)
-                              reverse)]
-    scored-fragments))
+(defn score-by-varref-count [expansion]
+  (assoc expansion :score (count (:varrefs expansion))))
 
 
-(defn generate [template data]
-  (let [fragments (generate-fragments template data)
-        scored-fragments (score-fragments fragments)
-        best-fragment (second (first scored-fragments))]
-    (:text best-fragment)))
+(defn generate-all
+  ([templates data]
+   (generate-all templates data {}))
+  ([templates data options]
+   (->> (apply concat (map #(expand % data) templates))
+        (map (get options :scorer score-by-varref-count))
+        (sort-by :score)
+        reverse
+        (map :text))))
+
+
+(defn generate
+  ([templates data]
+   (generate templates data {}))
+  ([templates data options]
+   (-> (generate-all templates data options)
+       first)))
