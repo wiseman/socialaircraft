@@ -16,18 +16,20 @@
                                   (.-message %))]
   (def logger (createLogger
                #js {:level "debug"
-                    :format (.combine format
-                                      (.colorize format #js {:all true})
-                                      (.timestamp format #js {:format "YYYYMMDD HHmmss"})
-                                      (.errors format #js {:stack true})
-                                      (.splat format)
-                                      (.timestamp format)
-                                      (.label format)
-                                      (.ms format)
-                                      (.json format))
+                    :format (.combine
+                             format
+                             (.colorize format #js {:all true})
+                             (.timestamp format #js {:format "YYYYMMDD HHmmss"})
+                             (.errors format #js {:stack true})
+                             (.splat format)
+                             (.timestamp format)
+                             (.label format)
+                             (.ms format)
+                             (.json format))
                     :defaultMeta #js {}}))
-  (.add logger (new (.-Console transports) #js {:format (.combine format
-                                                                  (.printf format printf-fmt))})))
+  (.add logger (new (.-Console transports)
+                    #js {:format (.combine format
+                                           (.printf format printf-fmt))})))
 
 
 (defn get-logger [service]
@@ -81,25 +83,29 @@
           lon2 (radians (:long loc2))]
       (degrees (mod (Math/atan (* (Math/sin (- lon2 lon1)) (Math/cos lat2))
                                (- (* (Math/cos lat1) (Math/sin lat2))
-                                  (* (Math/sin lat1) (Math/cos lat2) (Math/cos (- lon2 lon1)))))
+                                  (* (Math/sin lat1)
+                                     (Math/cos lat2)
+                                     (Math/cos (- lon2 lon1)))))
                     (* 2 Math/pi))))))
 
 
 (def cardinal-directions
-  [["N"  0]
+  [["N" 0]
    ["NE" 45]
-   ["E"  90]
+   ["E" 90]
    ["SE" 135]
-   ["S"  180]
+   ["S" 180]
    ["SW" 225]
-   ["W"  270]
-   ["NW" 315]])
+   ["W" 270]
+   ["NW" 315]
+   ;; Need another "N" to capture e.g. 350.
+   ["N" 360]])
 
-;; (defn bearing-to-direction [bearing]
-;;   (let [errors (mapv (fn [cd]
-;;                        [(Math/abs (- bearing (nth % 1))) (first cd)])
-;;                      cardinal-directions)]
-;;     (first (first (sort-by first errors)))))
+(defn bearing->direction [bearing]
+  (let [errors (mapv (fn [[dir brg]]
+                       [(Math/abs (- bearing brg)) dir])
+                     cardinal-directions)]
+    (second (first (sort-by first errors)))))
 
 
 (defn relative-path
