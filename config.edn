@@ -1,4 +1,5 @@
-{:mastodon
+{:app-name "socialaircraft"
+ :mastodon
  {:base-url "http://mastodon.local:3000/"
   :tootctl-url "http://mastodon.local:5000/api/v1/tootctl"
   :admin-name "admin@mastodon.local"

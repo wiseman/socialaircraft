@@ -105,24 +105,21 @@
 
 (defn main [& args]
   (go
-    (let [reg "N12"
+    (let [reg "N46"
+          email (str "jjwiseman+" reg "@gmail.com")
           config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)
-          password (:password (<! (social/create-account&
-                                   config reg
-                                   (str "jjwiseman+" reg "@gmail.com"))))
-          page (:page (<! (social/browser-for-mastodon-user&
-                           config
-                           (str "jjwiseman+" reg "@gmail.com")
-                           password)))]
+          password (:password (<! (social/create-account& config reg email)))
+          browser (:browser (<! (social/browser-for-mastodon-user& config email password)))]
       (social/set-current-profile&
        config
-       page
+       browser
        {:bio "I am a nice bot."
         :bot? true
         :display-name reg
         :discoverable? true
         :avatar "/Users/wiseman/Desktop/n404kr.jpeg"
         :header "/Users/wiseman/Desktop/n404kr-banner.jpg"})
+      (info "codes: %s" (<! (social/authorize-app& config browser)))
 
       ;;(social/create-account& config "N662PD" "jjwiseman+N662PD@gmail.com")
       ;; (go
