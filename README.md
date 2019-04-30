@@ -19,18 +19,18 @@ npx shadow-cljs watch script test
 ```
 
 - [ ] Get live aircraft info.
-  - [ ] Get data from local VRS.
+  - [x] Get data from local VRS.
   - [ ] Get data from asbexchange.com.
   - [ ] Get track screenshot.
 - [ ] Get aircraft profile info.
   - [ ] Get photos.
-    - [ ] Get photos from airport-data.com.
+    - [x] Get photos from airport-data.com.
     - [ ] Get other photos.
     - [ ] Get historical tracks.
 - [ ] Create mastodon account.
-  - [ ] Create account.
-  - [ ] Add bio.
-  - [ ] Add avatar.
-  - [ ] Add banner.
+  - [x] Create account.
+  - [x] Add bio.
+  - [x] Add avatar.
+  - [x] Add banner.
   - [ ] Save account in database.
 
