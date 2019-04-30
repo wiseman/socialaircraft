@@ -1,7 +1,7 @@
 (ns lemondronor.socialaircraft.social
   (:require
    [cljs-http.client :as http]
-   [cljs.core.async :refer [chan <! put! go close!]]
+   [cljs.core.async :refer [chan <! >! put! go close!]]
    [goog.object :as gobject]
    [lemondronor.socialaircraft.db :as db]
    [lemondronor.socialaircraft.generation :as generation]
@@ -49,7 +49,7 @@
       (put! ch :kaboom))))
 
 
-(def bio-templates
+(def ^:private bio-templates
   (map generation/parse-template
        ["I am {Reg}, a {Mdl} operated by {Op} in {Cou}."
         "I am {Reg}, a {Mdl} operated by {Op}."

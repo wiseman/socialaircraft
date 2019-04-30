@@ -1,8 +1,13 @@
 (ns lemondronor.socialaircraft.util
   (:require
+   [cljs-http.client :as http]
+   [cljs.core.async :refer [chan <! >! put! close!] :as async]
    [goog.string :as gstring]
    [goog.string.format]
+   ["fs" :as fs]
    ["path" :as path]
+   ["request" :as request]
+   ["tmp" :as tmp]
    ["winston" :as winston]))
 
 (let [createLogger (.-createLogger winston)
@@ -113,3 +118,38 @@
    (relative-path (.cwd js/process) path))
   ([from to]
    (path/relative from to)))
+
+
+;; cljs-http is kinda sucky. See https://github.com/r0man/cljs-http/issues/121
+;; TODO: Replace cljs-http.
+
+(defn http-get&
+  ([url]
+   (http-get& url {}))
+  ([url options]
+   (let [ch (chan)]
+     (async/go
+       (let [options (clj->js (merge {:uri url
+                                      :simple false
+                                      :resolveWithFullResponse true}
+                                     options))]
+         (.get request
+               options
+               (fn [err, response, body]
+                 (put! ch body)))))
+     ch)))
+
+
+;; Downloads the contents of a URL to a temp file.
+
+(defn download-url& [url]
+  (let [ch (chan)]
+    (async/go
+      ;; Need :encoding nil to preserve binary data.
+      (let [response (<! (http-get& url {:encoding nil}))]
+        (let [tmpfile (tmp/fileSync)
+              fd (.-fd tmpfile)]
+          (fs/writeSync fd response)
+          (fs/closeSync fd)
+          (>! ch (.-name tmpfile)))))
+    ch))

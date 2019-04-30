@@ -105,27 +105,30 @@
 
 (defn main [& args]
   (go
-    (let [reg "N46"
-          email (str "jjwiseman+" reg "@gmail.com")
-          config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)
-          password (:password (<! (social/create-account& config reg email)))
-          browser (:browser (<! (social/browser-for-mastodon-user& config email password)))]
-      (social/set-current-profile&
-       config
-       browser
-       {:bio "I am a nice bot."
-        :bot? true
-        :display-name reg
-        :discoverable? true
-        :avatar "/Users/wiseman/Desktop/n404kr.jpeg"
-        :header "/Users/wiseman/Desktop/n404kr-banner.jpg"})
-      (info "codes: %s" (<! (social/authorize-app& config browser)))
+    (let [path (<! (util/download-url& "http://www.airport-data.com/images/aircraft/thumbnails/000/614/614546.jpg"))]
+      (println path)))
+  ;; (go
+  ;;   (let [reg "N46"
+  ;;         email (str "jjwiseman+" reg "@gmail.com")
+  ;;         config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)
+  ;;         password (:password (<! (social/create-account& config reg email)))
+  ;;         browser (:browser (<! (social/browser-for-mastodon-user& config email password)))]
+  ;;     (social/set-current-profile&
+  ;;      config
+  ;;      browser
+  ;;      {:bio "I am a nice bot."
+  ;;       :bot? true
+  ;;       :display-name reg
+  ;;       :discoverable? true
+  ;;       :avatar "/Users/wiseman/Desktop/n404kr.jpeg"
+  ;;       :header "/Users/wiseman/Desktop/n404kr-banner.jpg"})
+  ;;     (info "codes: %s" (<! (social/authorize-app& config browser)))
 
-      ;;(social/create-account& config "N662PD" "jjwiseman+N662PD@gmail.com")
-      ;; (go
-      ;;   (let [url (<! (acinfo/get-profile-photo-airport-data& nil "N662PD"))]
-      ;;     (info "GOT URL %s" url)))
-      ))
+  ;;     ;;(social/create-account& config "N662PD" "jjwiseman+N662PD@gmail.com")
+  ;;     ;; (go
+  ;;     ;;   (let [url (<! (acinfo/get-profile-photo-airport-data& nil "N662PD"))]
+  ;;     ;;     (info "GOT URL %s" url)))
+  ;;     ))
   ;; (let [config (-> (config-path) (fs/readFileSync #js {:encoding "UTF-8"}) edn/read-string)]
   ;;   (social/create-account& config "blowme8" "jjwiseman+blowme8@gmail.com"))
   ;;(social/browser-test)
